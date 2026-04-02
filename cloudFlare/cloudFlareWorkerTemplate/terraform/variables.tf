@@ -22,7 +22,7 @@ variable "compatibility_date" {
 variable "worker_bundle_path" {
   type        = string
   description = "ビルド済みWorkerファイルへのパス"
-  default     = "dist/worker.mjs"
+  default     = "../app/dist/worker.mjs"
 }
 
 variable "cron_schedules" {
