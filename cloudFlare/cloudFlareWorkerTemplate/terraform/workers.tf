@@ -46,7 +46,7 @@ resource "cloudflare_worker_version" "worker_version" {
   ]
 }
 
-# 
+
 resource "cloudflare_workers_deployment" "worker_deployment" {
   account_id  = var.account_id
   script_name = cloudflare_worker.worker.name
