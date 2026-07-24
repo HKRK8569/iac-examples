@@ -1,6 +1,5 @@
 variable "cloudflare_api_token" {
-  type    = string
-  default = "apiToken"
+  type = string
 }
 
 variable "account_id" {
