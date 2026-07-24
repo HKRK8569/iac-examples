@@ -3,13 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-     "build": "tsup src/index.ts"
+    "build": "tsup"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260124.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "tsup": "^8.5.1"
   }
 }
