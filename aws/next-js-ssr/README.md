@@ -10,21 +10,41 @@ cloudfrontでSSRで生成したHTMLをキャッシュする
 - infra
    - terraformのコードを配置
 
+## ディレクトリ構成
+
+```
+infra/
+├── env/                  # 環境ごとのルートモジュール（ここで terraform を実行する）
+│   ├── dev/
+│   ├── stg/
+│   └── prd/
+└── modules/              # 環境から呼び出される部品
+    ├── network/          # VPC / subnet / IGW / NAT / route
+    ├── app/              # ALB / ECS / Aurora / ECR / S3 / Secrets Manager
+    └── edge/             # CloudFront
+```
+
 ## デプロイ手順
 
-AWSのアクセスキーを貼り付け
+AWSの認証情報を設定した上で、デプロイしたい環境のディレクトリで実行する。
 
 ```
-cd nextjs-ssr/modules/network
+cd infra/env/dev   # stg / prd の場合はディレクトリを変える
+cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars を編集（DBパスワード・コンテナイメージ等）
+
 terraform init
-terraform plan -var-file=../../env/terraform.tfvars
-terraform apply -var-file=../../env/terraform.tfvars
+terraform plan
+terraform apply
 ```
+
+※ 同ディレクトリの `terraform.tfvars` は自動で読み込まれるため `-var-file` の指定は不要
 
 ## 削除方法
 
 ```
-terraform destroy -var-file=../../env/terraform.tfvars
+cd infra/env/dev
+terraform destroy
 ```
 
 ## 構成図
