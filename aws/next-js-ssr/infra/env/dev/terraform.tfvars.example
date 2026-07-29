@@ -1,10 +1,11 @@
 # 共通
 region      = "ap-northeast-1"
-name_prefix = "next-js-ssr"
+name_prefix = "next-js-ssr-dev"
 
 tags = {
-  Project = "next-js-ssr"
-  Terraform  = "true"
+  Project   = "next-js-ssr"
+  Env       = "dev"
+  Terraform = "true"
 }
 
 # VPC
