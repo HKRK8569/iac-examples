@@ -35,15 +35,12 @@ db_subnet_cidrs = [
 ]
 
 # aurora
-
-db_name = ""
-
-db_username = ""
-
-db_password = ""
+db_name     = "app"
+db_username = "postgres"
+db_password = "CHANGE_ME" # 実際の値はコミットしないこと
 
 # ecs
-
 container_port = 3000
 
-container_image = "{ACCOUNT_ID}.dkr.ecr.{REGION}.amazonaws.com/{image_name}:{tag}"
+# ECRリポジトリ名は {name_prefix}-app（terraform output ecr_repository_url で確認できる）
+container_image = "{ACCOUNT_ID}.dkr.ecr.ap-northeast-1.amazonaws.com/next-js-ssr-dev-app:{TAG}"

@@ -19,5 +19,20 @@ output "db_subnet_ids" {
   description = "DB用サブネットID一覧"
 }
 
-# TODO: app追加時に alb_dns_name / ecr_repository_url / images_bucket_name を追加
+# app
+output "alb_dns_name" {
+  value       = module.app.alb_dns_name
+  description = "ALBのDNS名（CloudFront経由前の動作確認に使用）"
+}
+
+output "ecr_repository_url" {
+  value       = module.app.ecr_repository_url
+  description = "ECRリポジトリURL（docker pushに使用）"
+}
+
+output "images_bucket_name" {
+  value       = module.app.images_bucket_name
+  description = "画像用バケット名"
+}
+
 # TODO: edge追加時に cloudfront_domain_name を追加

@@ -2,7 +2,7 @@
 # auroraのサブネットの指定
 resource "aws_db_subnet_group" "aurora" {
   name       = "${var.name_prefix}-aurora-subnet-group"
-  subnet_ids = module.network.private_subnet_ids
+  subnet_ids = var.db_subnet_ids
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-aurora-subnet-group"
@@ -12,19 +12,21 @@ resource "aws_db_subnet_group" "aurora" {
 # auroraのSGの設定
 resource "aws_security_group" "aurora" {
   name   = "${var.name_prefix}-aurora-sg"
-  vpc_id = module.network.vpc_id
+  vpc_id = var.vpc_id
 
   ingress {
-    description = "ECSからのみアクセスを許可する"
+    # ECSからのみアクセスを許可する
+    description = "Allow PostgreSQL from ECS only"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    # TODO:ECSを定義後に設定を追加する
-    security_groups = []
+    # TODO: bastionモジュール作成後に踏み台SGを追加する
+    security_groups = [aws_security_group.app.id]
   }
 
   egress {
-    description = "アウトバウンドを全て許可する"
+    # アウトバウンドを全て許可する
+    description = "Allow all outbound"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -49,6 +51,13 @@ resource "aws_rds_cluster" "this" {
   db_subnet_group_name   = aws_db_subnet_group.aurora.name
   vpc_security_group_ids = [aws_security_group.aurora.id]
 
+  # バックアップの保持日数
+  backup_retention_period = 7
+
+  # サンプル用にdestroy時のスナップショット取得をスキップする
+  # 本番運用ではfalseにすること
+  skip_final_snapshot = true
+
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-postgres"
   })
@@ -59,7 +68,7 @@ resource "aws_rds_cluster_instance" "writer" {
   identifier          = "${var.name_prefix}-postgres-writer"
   cluster_identifier  = aws_rds_cluster.this.id
   count               = 1
-  instance_class      = "db.t4g.micro"
+  instance_class      = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
   engine              = aws_rds_cluster.this.engine
   engine_version      = aws_rds_cluster.this.engine_version
   publicly_accessible = false
@@ -75,7 +84,7 @@ resource "aws_rds_cluster_instance" "reader" {
   count               = 1
   identifier          = "${var.name_prefix}-postgres-reader-${count.index + 1}"
   cluster_identifier  = aws_rds_cluster.this.id
-  instance_class      = "db.t4g.micro"
+  instance_class      = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
   engine              = aws_rds_cluster.this.engine
   engine_version      = aws_rds_cluster.this.engine_version
   publicly_accessible = false

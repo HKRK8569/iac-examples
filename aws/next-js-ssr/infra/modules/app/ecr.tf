@@ -1,6 +1,6 @@
 
 resource "aws_ecr_repository" "app" {
-  name = "app"
+  name = "${var.name_prefix}-app"
   # 同じtag名は許可しない
   image_tag_mutability = "IMMUTABLE"
 

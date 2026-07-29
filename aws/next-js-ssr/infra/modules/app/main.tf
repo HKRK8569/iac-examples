@@ -9,7 +9,5 @@ terraform {
   }
 }
 
-# リージョン
-provider "aws" {
-  region = var.region
-}
+# 現在のAWSアカウント情報（S3バケット名のサフィックスに使用）
+data "aws_caller_identity" "current" {}

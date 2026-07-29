@@ -1,9 +1,10 @@
 resource "aws_security_group" "app" {
   name   = "${var.name_prefix}-app-sg"
-  vpc_id = module.network.vpc_id
+  vpc_id = var.vpc_id
 
   ingress {
-    description     = "ALBからのコンテナのポートを許可"
+    # ALBからのコンテナのポートを許可
+    description     = "Allow container port from ALB"
     from_port       = var.container_port
     to_port         = var.container_port
     protocol        = "tcp"
@@ -11,7 +12,8 @@ resource "aws_security_group" "app" {
   }
 
   egress {
-    description = "アウトバウンドを全て許可する"
+    # アウトバウンドを全て許可する
+    description = "Allow all outbound"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -32,6 +34,8 @@ resource "aws_ecs_task_definition" "this" {
   memory = 512
 
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
+  # アプリ自身がAWS APIを呼ぶ用（S3の署名付きURL発行など）
+  task_role_arn = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
@@ -49,6 +53,16 @@ resource "aws_ecs_task_definition" "this" {
       environment = [
         { name = "NODE_ENV", value = "production" },
         { name = "PORT", value = tostring(var.container_port) }
+      ]
+
+      # Secrets ManagerからDB接続情報を注入する（起動時に実行ロールで取得される）
+      secrets = [
+        { name = "DB_NAME", valueFrom = "${aws_secretsmanager_secret.database.arn}:db_name::" },
+        { name = "DB_USERNAME", valueFrom = "${aws_secretsmanager_secret.database.arn}:username::" },
+        { name = "DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.database.arn}:password::" },
+        { name = "DB_WRITER_ENDPOINT", valueFrom = "${aws_secretsmanager_secret.database.arn}:writer_endpoint::" },
+        { name = "DB_READER_ENDPOINT", valueFrom = "${aws_secretsmanager_secret.database.arn}:reader_endpoint::" },
+        { name = "DB_PORT", valueFrom = "${aws_secretsmanager_secret.database.arn}:port::" }
       ]
 
       logConfiguration = {
@@ -82,7 +96,7 @@ resource "aws_ecs_service" "this" {
   launch_type = "FARGATE"
 
   network_configuration {
-    subnets          = module.network.private_subnet_ids
+    subnets          = var.app_subnet_ids
     security_groups  = [aws_security_group.app.id]
     assign_public_ip = false
   }

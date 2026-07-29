@@ -12,3 +12,13 @@ output "images_bucket_regional_domain_name" {
   value       = aws_s3_bucket.images.bucket_regional_domain_name
   description = "画像用バケットドメイン名"
 }
+
+output "alb_dns_name" {
+  value       = aws_lb.this.dns_name
+  description = "ALBのDNS名（CloudFrontのオリジンに使用）"
+}
+
+output "ecr_repository_url" {
+  value       = aws_ecr_repository.app.repository_url
+  description = "ECRリポジトリURL（docker pushに使用）"
+}

@@ -30,11 +30,25 @@ module "network" {
   db_subnet_cidrs     = var.db_subnet_cidrs
 }
 
-# TODO: appモジュールの配線が終わったら追加する
-# module "app" {
-#   source = "../../modules/app"
-#   ...
-# }
+module "app" {
+  source = "../../modules/app"
+
+  name_prefix = var.name_prefix
+  tags        = var.tags
+  region      = var.region
+
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+  app_subnet_ids    = module.network.app_subnet_ids
+  db_subnet_ids     = module.network.db_subnet_ids
+
+  db_name     = var.db_name
+  db_username = var.db_username
+  db_password = var.db_password
+
+  container_port  = var.container_port
+  container_image = var.container_image
+}
 
 # TODO: edgeモジュールの配線が終わったら追加する
 # module "edge" {
