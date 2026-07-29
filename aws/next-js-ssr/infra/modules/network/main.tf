@@ -9,11 +9,6 @@ terraform {
   }
 }
 
-# リージョン
-provider "aws" {
-  region = var.region
-}
-
 # 定数
 locals {
   # natの数

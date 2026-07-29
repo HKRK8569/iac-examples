@@ -1,9 +1,4 @@
 # 共通
-variable "region" {
-  type    = string
-  default = "ap-northeast-1"
-}
-
 variable "tags" {
   description = "共通タグ"
   type        = map(string)
@@ -31,7 +26,12 @@ variable "public_subnet_cidrs" {
   type        = list(string)
 }
 
-variable "private_subnet_cidrs" {
-  description = "パブリックサブネットのサイダーを指定（例: ['10.0.101.0/24','10.0.102.0/24']）"
+variable "app_subnet_cidrs" {
+  description = "アプリ用プライベートサブネットのサイダーを指定（例: ['10.0.101.0/24','10.0.102.0/24']）"
+  type        = list(string)
+}
+
+variable "db_subnet_cidrs" {
+  description = "DB用プライベートサブネットのサイダーを指定（例: ['10.0.201.0/24','10.0.202.0/24']）"
   type        = list(string)
 }

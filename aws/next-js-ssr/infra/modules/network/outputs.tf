@@ -15,9 +15,14 @@ output "public_subnet_ids" {
   value       = aws_subnet.public[*].id
 }
 
-output "private_subnet_ids" {
-  description = "Private Subnet IDs"
-  value       = aws_subnet.private[*].id
+output "app_subnet_ids" {
+  description = "Private Subnet IDs (app: ECS・踏み台用)"
+  value       = aws_subnet.app[*].id
+}
+
+output "db_subnet_ids" {
+  description = "DB Subnet IDs (Aurora用)"
+  value       = aws_subnet.db[*].id
 }
 
 output "public_subnet_cidrs" {
@@ -25,9 +30,14 @@ output "public_subnet_cidrs" {
   value       = aws_subnet.public[*].cidr_block
 }
 
-output "private_subnet_cidrs" {
-  description = "Private Subnet CIDRs"
-  value       = aws_subnet.private[*].cidr_block
+output "app_subnet_cidrs" {
+  description = "Private Subnet CIDRs (app)"
+  value       = aws_subnet.app[*].cidr_block
+}
+
+output "db_subnet_cidrs" {
+  description = "DB Subnet CIDRs"
+  value       = aws_subnet.db[*].cidr_block
 }
 
 # internetGateway
@@ -58,9 +68,14 @@ output "public_route_table_id" {
   value       = aws_route_table.public.id
 }
 
-output "private_route_table_ids" {
-  description = "Private Route Table IDs (per AZ)"
-  value       = aws_route_table.private[*].id
+output "app_route_table_ids" {
+  description = "Private Route Table IDs (app, per AZ)"
+  value       = aws_route_table.app[*].id
+}
+
+output "db_route_table_id" {
+  description = "DB Route Table ID (NATルートなし・両AZ共有)"
+  value       = aws_route_table.db.id
 }
 
 # defaultResource
