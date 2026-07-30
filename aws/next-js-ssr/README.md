@@ -26,17 +26,56 @@ infra/
 
 ## デプロイ手順
 
+### 0. tfstate用S3バケットの作成（初回のみ・任意）
+
+tfstate（Terraformの状態ファイル）をS3で管理する場合は、専用バケットを事前に手動で作成する。
+※ 個人での検証だけならローカル保存（デフォルト）のままでもよい。チーム開発・CI/CD導入前には必須。
+
+```
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# バケット作成（tfstateはTerraform自身の管理外にするため手動で作る）
+aws s3api create-bucket \
+  --bucket next-js-ssr-tfstate-${ACCOUNT_ID} \
+  --region ap-northeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-northeast-1
+
+# バージョニング有効化（tfstateが壊れたとき過去の版に戻せるように）
+aws s3api put-bucket-versioning \
+  --bucket next-js-ssr-tfstate-${ACCOUNT_ID} \
+  --versioning-configuration Status=Enabled
+
+# パブリックアクセスの遮断（tfstateには機密情報が含まれる）
+aws s3api put-public-access-block \
+  --bucket next-js-ssr-tfstate-${ACCOUNT_ID} \
+  --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+```
+
+バケット名は `main.tf` に直書きせず、`.tfbackend` ファイルに記載してinit時に渡す（手順1参照）。
+ローカルにtfstateがある状態で切り替えると、S3への移行を促されるので `yes` で移行できる。
+
+### 1. terraformの実行
+
 AWSの認証情報を設定した上で、デプロイしたい環境のディレクトリで実行する。
 
 ```
 cd infra/env/dev   # stg / prd の場合はディレクトリを変える
+
+# 変数ファイルの準備
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars を編集（DBパスワード・コンテナイメージ等）
 
-terraform init
+# backend設定の準備（tfstateバケット名の指定）
+cp dev.s3.tfbackend.example dev.s3.tfbackend
+# dev.s3.tfbackend の <ACCOUNT_ID> を自分のアカウントIDに置き換える
+
+terraform init -backend-config=dev.s3.tfbackend
 terraform plan
 terraform apply
 ```
+
+※ `-backend-config` は初回initで `.terraform/` に記録されるため、2回目以降は `terraform init` だけでよい（バケットを変える場合は `-reconfigure` を付ける）
 
 ※ 同ディレクトリの `terraform.tfvars` は自動で読み込まれるため `-var-file` の指定は不要
 
