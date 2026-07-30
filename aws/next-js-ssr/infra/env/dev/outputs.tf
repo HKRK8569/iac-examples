@@ -35,6 +35,17 @@ output "images_bucket_name" {
   description = "画像用バケット名"
 }
 
+output "aurora_writer_endpoint" {
+  value       = module.app.aurora_writer_endpoint
+  description = "Auroraのwriterエンドポイント（踏み台経由の接続に使用）"
+}
+
+# bastion
+output "bastion_instance_id" {
+  value       = module.bastion.instance_id
+  description = "踏み台のインスタンスID（ssm start-session の --target に使用）"
+}
+
 # edge
 output "cloudfront_domain_name" {
   value       = module.edge.cloudfront_domain_name

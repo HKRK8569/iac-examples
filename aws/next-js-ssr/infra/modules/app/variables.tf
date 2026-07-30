@@ -37,6 +37,13 @@ variable "db_subnet_ids" {
   type        = list(string)
 }
 
+# bastion
+variable "bastion_security_group_id" {
+  description = "踏み台のSG ID（指定するとAuroraへの5432を許可する。踏み台を置かない環境はnull）"
+  type        = string
+  default     = null
+}
+
 # aurora
 variable "db_name" {
   description = "DB名"

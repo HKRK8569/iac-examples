@@ -15,13 +15,15 @@ resource "aws_security_group" "aurora" {
   vpc_id = var.vpc_id
 
   ingress {
-    # ECSからのみアクセスを許可する
-    description = "Allow PostgreSQL from ECS only"
+    # ECS（と踏み台がある環境では踏み台）からのみアクセスを許可する
+    description = "Allow PostgreSQL from ECS and bastion"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    # TODO: bastionモジュール作成後に踏み台SGを追加する
-    security_groups = [aws_security_group.app.id]
+    security_groups = concat(
+      [aws_security_group.app.id],
+      var.bastion_security_group_id != null ? [var.bastion_security_group_id] : []
+    )
   }
 
   egress {

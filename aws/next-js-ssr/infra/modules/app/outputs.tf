@@ -22,3 +22,8 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
   description = "ECRリポジトリURL（docker pushに使用）"
 }
+
+output "aurora_writer_endpoint" {
+  value       = aws_rds_cluster.this.endpoint
+  description = "Auroraのwriterエンドポイント（踏み台経由の接続・migrationに使用）"
+}

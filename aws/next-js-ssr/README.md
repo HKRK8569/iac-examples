@@ -79,6 +79,67 @@ terraform apply
 
 ※ 同ディレクトリの `terraform.tfvars` は自動で読み込まれるため `-var-file` の指定は不要
 
+## DBへの接続（踏み台経由）
+
+Auroraはインターネット経路のないDBサブネットにあるため、踏み台EC2を経由した
+SSMポートフォワーディングで接続する。踏み台はインバウンド全閉・公開IPなし・SSHキーなしで、
+接続はSSM Session Manager（IAM認証）のみ。
+
+### 前提
+
+- AWS CLI + [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) をローカルにインストール
+- 実行するIAMユーザー/ロールに `ssm:StartSession` の許可（対象を踏み台に限定する例）
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "ssm:StartSession",
+  "Resource": [
+    "arn:aws:ec2:ap-northeast-1:<ACCOUNT_ID>:instance/<踏み台のインスタンスID>",
+    "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSessionToRemoteHost"
+  ]
+}
+```
+
+### 接続手順
+
+```
+cd infra/env/dev
+
+# トンネルを張る（ローカルの15432 → Auroraの5432）
+aws ssm start-session \
+  --target $(terraform output -raw bastion_instance_id) \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"$(terraform output -raw aurora_writer_endpoint)\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
+
+# 別ターミナルから接続（パスワード等の接続情報はSecrets Managerに保存されている）
+psql -h localhost -p 15432 -U postgres app
+```
+
+### DBの初期設定（初回のみ）
+
+トンネルを張った状態で実行する。
+
+```
+# アプリ用のDBユーザーを作成する（master userをアプリから直接使わない）
+psql -h localhost -p 15432 -U postgres app
+app=> CREATE ROLE app_user WITH LOGIN PASSWORD '...';
+app=> GRANT ALL ON SCHEMA public TO app_user;
+
+# migrationの実行（アプリで採用するツールに合わせる。例: Prisma）
+cd ../../../app
+DATABASE_URL="postgresql://app_user:...@localhost:15432/app" npx prisma migrate deploy
+```
+
+### 踏み台の停止・起動
+
+使わないときは停止しておく（EC2の課金を止める。SSM接続は起動中のみ可能）。
+
+```
+aws ec2 stop-instances --instance-ids $(terraform output -raw bastion_instance_id)
+aws ec2 start-instances --instance-ids $(terraform output -raw bastion_instance_id)
+```
+
 ## 削除方法
 
 ```

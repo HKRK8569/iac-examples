@@ -36,6 +36,17 @@ module "network" {
   db_subnet_cidrs     = var.db_subnet_cidrs
 }
 
+module "bastion" {
+  source = "../../modules/bastion"
+
+  name_prefix = var.name_prefix
+  tags        = var.tags
+
+  vpc_id = module.network.vpc_id
+  # SSM接続にNATへの経路が必要なためappサブネットに配置（1AZに1台で十分）
+  subnet_id = module.network.app_subnet_ids[0]
+}
+
 module "app" {
   source = "../../modules/app"
 
@@ -47,6 +58,9 @@ module "app" {
   public_subnet_ids = module.network.public_subnet_ids
   app_subnet_ids    = module.network.app_subnet_ids
   db_subnet_ids     = module.network.db_subnet_ids
+
+  # 踏み台からAurora(5432)への接続を許可する
+  bastion_security_group_id = module.bastion.security_group_id
 
   db_name     = var.db_name
   db_username = var.db_username
