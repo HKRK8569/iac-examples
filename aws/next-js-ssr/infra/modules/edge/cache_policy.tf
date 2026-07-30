@@ -1,3 +1,17 @@
+# 検索避け: 全レスポンスに X-Robots-Tag: noindex を付ける
+resource "aws_cloudfront_response_headers_policy" "noindex" {
+  name    = "${var.name_prefix}-noindex"
+  comment = "Prevent search engine indexing"
+
+  custom_headers_config {
+    items {
+      header   = "X-Robots-Tag"
+      value    = "noindex, nofollow"
+      override = true
+    }
+  }
+}
+
 # キャッシュ無効
 data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"

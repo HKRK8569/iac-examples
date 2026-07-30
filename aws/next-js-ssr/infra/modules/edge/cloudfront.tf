@@ -39,7 +39,8 @@ resource "aws_cloudfront_distribution" "this" {
     allowed_methods = ["GET", "HEAD", "OPTIONS"]
     cached_methods  = ["GET", "HEAD", "OPTIONS"]
 
-    cache_policy_id = data.aws_cloudfront_cache_policy.caching_optimized.id
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.noindex.id
   }
 
   # /apiはキャッシュをせずに接続
@@ -52,8 +53,9 @@ resource "aws_cloudfront_distribution" "this" {
     cached_methods  = ["GET", "HEAD", "OPTIONS"]
 
     # /apiはキャッシュしない
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.noindex.id
   }
 
   # その他はデフォルトでキャッシュを行う
@@ -65,8 +67,9 @@ resource "aws_cloudfront_distribution" "this" {
     cached_methods  = ["GET", "HEAD", "OPTIONS"]
 
     # キャッシュを行う
-    cache_policy_id          = aws_cloudfront_cache_policy.ssr_cache.id
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.ssr_public.id
+    cache_policy_id            = aws_cloudfront_cache_policy.ssr_cache.id
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.ssr_public.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.noindex.id
   }
 
   # cloudFrontデフォルトのドメインを利用する
