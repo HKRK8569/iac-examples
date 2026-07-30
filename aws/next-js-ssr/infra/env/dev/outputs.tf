@@ -35,4 +35,8 @@ output "images_bucket_name" {
   description = "画像用バケット名"
 }
 
-# TODO: edge追加時に cloudfront_domain_name を追加
+# edge
+output "cloudfront_domain_name" {
+  value       = module.edge.cloudfront_domain_name
+  description = "cloudFrontのデフォルトドメイン（ここにアクセスして動作確認する）"
+}

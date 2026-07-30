@@ -8,8 +8,14 @@ terraform {
     }
   }
 
-  # TODO: 本番運用時はS3バックエンドに切り替える
-  # backend "s3" { ... }
+  # tfstate用のバケットは事前に手動で作成しておく（手順はREADME参照）
+  # bucketはアカウントIDを含むためここに直書きせず、
+  # dev.s3.tfbackend に記載して init 時に -backend-config で渡す（README参照）
+  backend "s3" {
+    key          = "dev/terraform.tfstate"
+    region       = "ap-northeast-1"
+    use_lockfile = true
+  }
 }
 
 # リージョン
@@ -50,8 +56,14 @@ module "app" {
   container_image = var.container_image
 }
 
-# TODO: edgeモジュールの配線が終わったら追加する
-# module "edge" {
-#   source = "../../modules/edge"
-#   ...
-# }
+module "edge" {
+  source = "../../modules/edge"
+
+  name_prefix = var.name_prefix
+  tags        = var.tags
+
+  alb_dns_name                       = module.app.alb_dns_name
+  images_bucket_regional_domain_name = module.app.images_bucket_regional_domain_name
+  images_bucket_id                   = module.app.images_bucket_name
+  images_bucket_arn                  = module.app.images_bucket_arn
+}

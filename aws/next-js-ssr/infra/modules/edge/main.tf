@@ -8,8 +8,3 @@ terraform {
     }
   }
 }
-
-# リージョン
-provider "aws" {
-  region = var.region
-}

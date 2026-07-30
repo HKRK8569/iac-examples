@@ -4,92 +4,22 @@ resource "aws_cloudfront_origin_access_control" "images" {
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
-
 }
-
-# キャッシュ無効
-data "aws_cloudfront_cache_policy" "caching_disabled" {
-  name = "Managed-CachingDisabled"
-}
-
-# キャッシュ最適化
-data "aws_cloudfront_cache_policy" "caching_optimized" {
-  name = "Managed-CachingOptimized"
-}
-
-# ssr用のキャッシュ設定
-resource "aws_cloudfront_cache_policy" "ssr_cache" {
-  name        = "${var.name_prefix}-ssr-cache"
-  comment     = "SSRはデフォルトでキャッシュする"
-  min_ttl     = 0
-  default_ttl = 60
-  max_ttl     = 3600
-
-  parameters_in_cache_key_and_forwarded_to_origin {
-    cookies_config {
-      cookie_behavior = "none"
-    }
-
-    headers_config {
-      header_behavior = "whitelist"
-      headers {
-        items = ["Accept", "Host"]
-      }
-    }
-
-    query_strings_config {
-      query_string_behavior = "all"
-    }
-
-    enable_accept_encoding_gzip   = true
-    enable_accept_encoding_brotli = true
-  }
-}
-
-# 全て許可
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
-}
-
-resource "aws_cloudfront_origin_request_policy" "ssr_public" {
-  name    = "${var.name_prefix}-ssr-public"
-  comment = "SSR用のリクエストポリシー"
-
-  # cookieは送らない
-  cookies_config {
-    cookie_behavior = "none"
-  }
-
-  headers_config {
-    header_behavior = "whitelist"
-    headers {
-      items = ["Accept", "Host"]
-    }
-  }
-
-  # queryStringsは全て許可
-  query_strings_config {
-    query_string_behavior = "all"
-  }
-}
-
-
 
 resource "aws_cloudfront_distribution" "this" {
   enabled         = true
   is_ipv6_enabled = true
 
-
-
   # cloudFrontからS3へ接続(/images)
   origin {
-    domain_name              = aws_s3_bucket.images.bucket_regional_domain_name
-    origin_id                = "s3-image-origin"
-    origin_access_control_id = aws_cloudfront_origin_access_control.images_oac.id
+    domain_name              = var.images_bucket_regional_domain_name
+    origin_id                = "s3-images-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.images.id
   }
+
   # CloudFrontからALBへHTTPで接続(デフォルト)
   origin {
-    domain_name = aws_lb.this.dns_name
+    domain_name = var.alb_dns_name
     origin_id   = "alb-origin"
 
     custom_origin_config {
@@ -100,8 +30,6 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-
-
   # imagesはS3に飛ばす
   ordered_cache_behavior {
     path_pattern           = "/images/*"
@@ -110,7 +38,6 @@ resource "aws_cloudfront_distribution" "this" {
 
     allowed_methods = ["GET", "HEAD", "OPTIONS"]
     cached_methods  = ["GET", "HEAD", "OPTIONS"]
-
 
     cache_policy_id = data.aws_cloudfront_cache_policy.caching_optimized.id
   }
@@ -141,7 +68,6 @@ resource "aws_cloudfront_distribution" "this" {
     cache_policy_id          = aws_cloudfront_cache_policy.ssr_cache.id
     origin_request_policy_id = aws_cloudfront_origin_request_policy.ssr_public.id
   }
-
 
   # cloudFrontデフォルトのドメインを利用する
   viewer_certificate {
