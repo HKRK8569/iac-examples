@@ -37,11 +37,12 @@ resource "aws_route_table" "app" {
 
 # Private -> Internet
 # プライベートネットワークからインターネットの全てはnatGatewayを経由して外に出る
+# 冗長化OFF（NAT1台）のときは全AZのルートがそのNATを共有する
 resource "aws_route" "app_nat" {
   count                  = length(var.azs)
   route_table_id         = aws_route_table.app[count.index].id
   destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.this[count.index].id
+  nat_gateway_id         = aws_nat_gateway.this[min(count.index, local.nat_count - 1)].id
 }
 
 # アプリ用プライベートサブネットとrouteTableの紐付け

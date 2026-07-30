@@ -28,6 +28,7 @@ module "network" {
 
   name_prefix = var.name_prefix
   tags        = var.tags
+  multi_az    = var.multi_az
 
   vpc_cidr            = var.vpc_cidr
   azs                 = var.azs
@@ -53,6 +54,7 @@ module "app" {
   name_prefix = var.name_prefix
   tags        = var.tags
   region      = var.region
+  multi_az    = var.multi_az
 
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids

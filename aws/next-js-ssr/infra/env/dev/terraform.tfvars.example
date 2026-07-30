@@ -2,6 +2,9 @@
 region      = "ap-northeast-1"
 name_prefix = "next-js-ssr-dev"
 
+# 冗長化フラグ（devはコスト削減のためOFF: NAT 1台・ECSタスク1つ・reader 0台）
+multi_az = false
+
 tags = {
   Project   = "next-js-ssr"
   Env       = "dev"

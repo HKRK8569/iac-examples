@@ -1,4 +1,10 @@
 # 共通
+variable "multi_az" {
+  description = "冗長化フラグ。falseにするとECSタスクを1つ・Auroraのreaderを0台に減らす（devコスト削減用）"
+  type        = bool
+  default     = true
+}
+
 variable "region" {
   description = "AWSリージョン（CloudWatch Logsの出力先指定に使用）"
   type        = string

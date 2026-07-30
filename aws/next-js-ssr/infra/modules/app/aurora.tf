@@ -82,8 +82,9 @@ resource "aws_rds_cluster_instance" "writer" {
 }
 
 # readerの設定
+# 冗長化OFFのときは作らない（writerのみ）
 resource "aws_rds_cluster_instance" "reader" {
-  count               = 1
+  count               = var.multi_az ? 1 : 0
   identifier          = "${var.name_prefix}-postgres-reader-${count.index + 1}"
   cluster_identifier  = aws_rds_cluster.this.id
   instance_class      = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）

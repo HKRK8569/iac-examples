@@ -1,4 +1,10 @@
 # 共通
+variable "multi_az" {
+  description = "冗長化フラグ。falseにするとNAT Gatewayを1台に減らす（devコスト削減用。サブネット自体は無料かつALB/Auroraの要件で2AZ分残す）"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "共通タグ"
   type        = map(string)

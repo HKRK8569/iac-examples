@@ -1,4 +1,10 @@
 # 共通
+variable "multi_az" {
+  description = "冗長化フラグ。falseにするとNAT 1台・ECSタスク1つ・Auroraのreader 0台になる（1人での検証用）。サブネットはALB/Auroraの要件により常に2AZ分作られる"
+  type        = bool
+  default     = true
+}
+
 variable "region" {
   description = "AWSリージョン"
   type        = string
