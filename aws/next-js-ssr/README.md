@@ -112,24 +112,28 @@ aws ssm start-session \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
   --parameters "{\"host\":[\"$(terraform output -raw aurora_writer_endpoint)\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
 
-# 別ターミナルから接続（パスワード等の接続情報はSecrets Managerに保存されている）
+# 別ターミナルから接続して確認できる（パスワード等の接続情報はSecrets Managerに保存されている）
 psql -h localhost -p 15432 -U postgres app
 ```
 
 ### DBの初期設定（初回のみ）
 
-トンネルを張った状態で実行する。
+トンネルを張った状態で、Drizzleのmigration（`app/drizzle/` のSQL）を適用してテーブルを作成する。
 
 ```
-# アプリ用のDBユーザーを作成する（master userをアプリから直接使わない）
-psql -h localhost -p 15432 -U postgres app
-app=> CREATE ROLE app_user WITH LOGIN PASSWORD '...';
-app=> GRANT ALL ON SCHEMA public TO app_user;
+cd app
 
-# migrationの実行（アプリで採用するツールに合わせる。例: Prisma）
-cd ../../../app
-DATABASE_URL="postgresql://app_user:...@localhost:15432/app" npx prisma migrate deploy
+# 接続情報は terraform.tfvars（= Secrets Managerに保存される値）と同じものを指定する
+DB_WRITER_ENDPOINT=localhost \
+DB_PORT=15432 \
+DB_NAME=app \
+DB_USERNAME=postgres \
+DB_PASSWORD=<terraform.tfvarsのdb_password> \
+npm run db:migrate
 ```
+
+- スキーマを変更したときは `app/src/db/schema.ts` を編集 → `npm run db:generate` でmigrationファイルを生成してコミット → 同じ手順で `npm run db:migrate` を実行する
+- ローカル開発用DB（`app/compose.yaml`）への適用は `.env.local` の値が使われるため `npm run db:migrate` だけでよい
 
 ### 踏み台の停止・起動
 
