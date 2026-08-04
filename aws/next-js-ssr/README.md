@@ -3,7 +3,8 @@
 ## 概要
 nextjs(SSR)をAWSにデプロイするterraformのコード
 画像などはS3に配置しcloudFront経由で取得を行う想定
-cloudfrontでSSRで生成したHTMLをキャッシュする
+SSRページは編集の即時反映を優先して毎回レンダリングする（キャッシュしない）
+CloudFrontでキャッシュするのは静的シェル・画像・アセットで、アプリが `Cache-Control`（`revalidate`）を返せばSSRページのキャッシュにも切り替えられる
 
 - app
    - nextjsのコードを配置
