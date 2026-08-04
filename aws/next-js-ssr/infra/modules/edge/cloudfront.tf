@@ -58,7 +58,7 @@ resource "aws_cloudfront_distribution" "this" {
     response_headers_policy_id = aws_cloudfront_response_headers_policy.noindex.id
   }
 
-  # その他はデフォルトでキャッシュを行う
+  # その他（ページ・_next/static等）はALBへ
   default_cache_behavior {
     target_origin_id       = "alb-origin"
     viewer_protocol_policy = "redirect-to-https"
@@ -66,7 +66,8 @@ resource "aws_cloudfront_distribution" "this" {
     allowed_methods = ["GET", "HEAD", "OPTIONS"]
     cached_methods  = ["GET", "HEAD", "OPTIONS"]
 
-    # キャッシュを行う
+    # キャッシュはオリジンのCache-Controlに従う（上限1時間）
+    # SSRページはno-storeを返すためキャッシュされず、静的シェル・JS/CSSアセットはキャッシュされる
     cache_policy_id            = aws_cloudfront_cache_policy.ssr_cache.id
     origin_request_policy_id   = aws_cloudfront_origin_request_policy.ssr_public.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.noindex.id
