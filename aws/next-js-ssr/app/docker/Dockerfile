@@ -1,4 +1,5 @@
-FROM node:24.13.0-alpine
+# 後段の COPY --from=builder が参照するステージ名（これがないとbuildが失敗する）
+FROM node:24.13.0-alpine AS builder
 
 WORKDIR /app
 
