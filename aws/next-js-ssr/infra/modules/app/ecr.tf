@@ -34,7 +34,8 @@ resource "aws_ecr_lifecycle_policy" "app" {
         description  = "タグが付いているものは3つまで残す"
         selection = {
           tagStatus = "tagged"
-          countType = "imageCountMoreThan"
+          countType = "imageCountMoreThan",
+          "tagPatternList" : ["*"],
           #   dev,prdなどで分ける場合多めにとる
           countNumber = 3
         }
