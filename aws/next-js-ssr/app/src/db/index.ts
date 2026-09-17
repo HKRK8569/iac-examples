@@ -3,6 +3,7 @@ import "server-only";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
+import { databaseSsl } from "./ssl";
 
 // 環境変数はECSタスク定義でSecrets Managerから注入される（infra/modules/app/ecs.tf）
 // ローカルでは .env.localを使う
@@ -14,16 +15,19 @@ function connectionString(host: string): string {
   return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }
 
+const writerHost = process.env.DB_WRITER_ENDPOINT ?? "localhost";
+const readerHost = process.env.DB_READER_ENDPOINT ?? writerHost;
+
 const writerPool = new Pool({
-  connectionString: connectionString(process.env.DB_WRITER_ENDPOINT ?? "localhost"),
+  connectionString: connectionString(writerHost),
+  ssl: databaseSsl(writerHost),
   max: 5,
 });
 
 // readerエンドポイントはreaderが0台のとき自動でwriterに向く（multi_az=false時）
 const readerPool = new Pool({
-  connectionString: connectionString(
-    process.env.DB_READER_ENDPOINT ?? process.env.DB_WRITER_ENDPOINT ?? "localhost",
-  ),
+  connectionString: connectionString(readerHost),
+  ssl: databaseSsl(readerHost),
   max: 5,
 });
 

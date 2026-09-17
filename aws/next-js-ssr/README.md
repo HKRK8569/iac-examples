@@ -114,7 +114,11 @@ aws ssm start-session \
   --parameters "{\"host\":[\"$(terraform output -raw aurora_writer_endpoint)\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
 
 # 別ターミナルから接続して確認できる（パスワード等の接続情報はSecrets Managerに保存されている）
-psql -h localhost -p 15432 -U postgres app
+# プロジェクトルートの別ターミナル（以下はbash）
+mkdir -p app/certs
+curl --fail --location https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o app/certs/global-bundle.pem
+AURORA_WRITER=$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)
+psql "host=$AURORA_WRITER hostaddr=127.0.0.1 port=15432 user=postgres dbname=app sslmode=verify-full sslrootcert=app/certs/global-bundle.pem"
 ```
 
 ### DBの初期設定（初回のみ）
@@ -125,8 +129,11 @@ psql -h localhost -p 15432 -U postgres app
 cd app
 
 # 接続情報は terraform.tfvars（= Secrets Managerに保存される値）と同じものを指定する
-DB_WRITER_ENDPOINT=localhost \
+DB_WRITER_ENDPOINT=127.0.0.1 \
 DB_PORT=15432 \
+DB_SSL_MODE=verify-full \
+DB_SSL_CA_PATH=./certs/global-bundle.pem \
+DB_SSL_SERVERNAME="$AURORA_WRITER" \
 DB_NAME=app \
 DB_USERNAME=postgres \
 DB_PASSWORD=<terraform.tfvarsのdb_password> \
@@ -135,6 +142,48 @@ npm run db:migrate
 
 - スキーマを変更したときは `app/src/db/schema.ts` を編集 → `npm run db:generate` でmigrationファイルを生成してコミット → 同じ手順で `npm run db:migrate` を実行する
 - ローカル開発用DB（`app/compose.yaml`）への適用は `.env.local` の値が使われるため `npm run db:migrate` だけでよい
+
+### DB接続のTLS設定
+
+ローカルのWeb開発はHTTPのまま、ローカルPostgreSQLは `DB_SSL_MODE=disable`（未指定時も同じ）で利用する。
+`app/.env.example` を `app/.env.local` にコピーすると、composeのDBポート5433に接続できる。
+
+Auroraは `DB_SSL_MODE=verify-full` を指定し、AWSのCA証明書と接続先名を検証する。
+ECSタスク定義はTLSを有効にし、Dockerfileがビルド時に取得した `/app/certs/global-bundle.pem` を利用する。
+writer / readerはそれぞれのエンドポイント名を検証する。ブラウザのHTTP/HTTPS設定とは独立している。
+
+SSM経由のmigrationではTCPの接続先を `127.0.0.1`、`DB_SSL_SERVERNAME` を実際のAurora writerエンドポイントにする。
+上のmigrationコマンドは、CAを取得し `AURORA_WRITER` を設定した同じbashターミナルで、プロジェクトルートから実行する。
+`DB_SSL_SERVERNAME` はトンネル用なので、ECSの通常接続には設定しない。
+PowerShellではCAを次のように取得できる（プロジェクトルートで実行）。
+
+```powershell
+New-Item -ItemType Directory -Force app/certs
+Invoke-WebRequest -Uri https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -OutFile app/certs/global-bundle.pem
+$env:DB_SSL_SERVERNAME = terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint
+$env:DB_WRITER_ENDPOINT = "127.0.0.1"
+$env:DB_PORT = "15432"
+$env:DB_SSL_MODE = "verify-full"
+$env:DB_SSL_CA_PATH = "./certs/global-bundle.pem"
+# DB_NAME / DB_USERNAME / DB_PASSWORD も対象Auroraの値を設定する
+Set-Location app
+npm run db:migrate
+```
+
+トンネル用の環境変数がローカルDB接続に残らないよう、作業後はそのターミナルを閉じる。
+CA証明書の更新時はイメージを再ビルド・再デプロイし、PC側のCAファイルも更新する。
+
+反映後はアプリのwriter / readerとmigrationの接続を確認する。
+各接続で次のSQLを実行し、`ssl=true` であることを確認する。
+
+```sql
+SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();
+```
+
+さらに、トンネル接続で検証先名を誤った名前にした場合や、無関係なCAを指定した場合に接続が拒否されることを確認する。
+接続確認は `SELECT 1` などの読み取りだけで行い、migrationを検証目的で繰り返さない。
+
+参考: [AuroraのCA証明書](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/UsingWithRDS.SSL.html)
 
 ### 踏み台の停止・起動
 

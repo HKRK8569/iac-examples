@@ -52,6 +52,8 @@ resource "aws_ecs_task_definition" "this" {
 
       environment = [
         { name = "NODE_ENV", value = "production" },
+        { name = "DB_SSL_MODE", value = "verify-full" },
+        { name = "DB_SSL_CA_PATH", value = "/app/certs/global-bundle.pem" },
         { name = "PORT", value = tostring(var.container_port) }
       ]
 

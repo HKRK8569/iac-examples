@@ -8,11 +8,16 @@ RUN npm ci
 
 COPY . .
 
+# AWS公開CAをビルド時に取得し、実行時のネットワーク取得を不要にする
+RUN mkdir -p /rds-certs && wget -O /rds-certs/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+
 RUN npm run build
 
 FROM node:24.13.0-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+COPY --chown=node:node --from=builder /rds-certs/global-bundle.pem /app/certs/global-bundle.pem
 
 USER node
 
