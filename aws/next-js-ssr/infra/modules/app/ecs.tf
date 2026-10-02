@@ -54,6 +54,7 @@ resource "aws_ecs_task_definition" "this" {
         { name = "NODE_ENV", value = "production" },
         { name = "DB_SSL_MODE", value = "verify-full" },
         { name = "DB_SSL_CA_PATH", value = "/app/certs/global-bundle.pem" },
+        { name = "IMAGES_BUCKET_NAME", value = aws_s3_bucket.images.bucket },
         { name = "PORT", value = tostring(var.container_port) }
       ]
 
