@@ -1,0 +1,12 @@
+# ホストのビルド成果物・依存はイメージに入れない（コンテナ内でnpm ciする）
+node_modules
+.next
+
+# 秘密情報・ローカル設定はイメージに焼き込まない
+.env*
+!.env.example
+
+# 開発用ファイル（docker/ はDockerfile参照のため除外しない）
+compose.yaml
+*.md
+.git
