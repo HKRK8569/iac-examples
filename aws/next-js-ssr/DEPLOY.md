@@ -1,6 +1,6 @@
 # dev環境のデプロイ手順
 
-PowerShellでプロジェクトルートから実行する。現在ある環境定義は `infra/env/dev` のみ。初回はECRだけ先に作成し、イメージをpushしてから全体をapplyする。
+PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-js-ssr`）から実行する。現在ある環境定義は `infra/env/dev` のみ。初回はECRだけ先に作成し、イメージをpushしてから全体をapplyする。
 
 ## デプロイ前チェックリスト
 
@@ -11,9 +11,9 @@ PowerShellでプロジェクトルートから実行する。現在ある環境�
 - [ ] `terraform.tfvars` のDBパスワードを変更し、リソース名、サブネット、タグを確認した。`.tfvars`、`.tfbackend`、パスワードをGitに含めない
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
 
-確認コマンド:
+確認コマンド（PowerShell・bash共通）:
 
-```powershell
+```text
 terraform version
 aws --version
 docker info --format '{{.ServerVersion}}'
@@ -37,6 +37,16 @@ aws s3api put-bucket-versioning --bucket $stateBucket --versioning-configuration
 aws s3api put-public-access-block --bucket $stateBucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
 ```
 
+Linux系（bash）:
+
+```bash
+account_id="$(aws sts get-caller-identity --query Account --output text)"
+state_bucket="next-js-ssr-tfstate-${account_id}"
+aws s3api create-bucket --bucket "$state_bucket" --region ap-northeast-1 --create-bucket-configuration LocationConstraint=ap-northeast-1
+aws s3api put-bucket-versioning --bucket "$state_bucket" --versioning-configuration Status=Enabled
+aws s3api put-public-access-block --bucket "$state_bucket" --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
+```
+
 ## 2. 変数とbackendを準備する（初回のみ）
 
 既に `terraform.tfvars` と `dev.s3.tfbackend` がある場合はコピーせず再利用する。
@@ -46,13 +56,22 @@ Copy-Item infra/env/dev/terraform.tfvars.example infra/env/dev/terraform.tfvars
 Copy-Item infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
 ```
 
+Linux系（bash）:
+
+```bash
+cp infra/env/dev/terraform.tfvars.example infra/env/dev/terraform.tfvars
+cp infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
+```
+
 `infra/env/dev/terraform.tfvars` の `db_password` を実際の値にする。`container_image` は手順4のpush後に設定するので、この時点ではプレースホルダーのままでよい。`infra/env/dev/dev.s3.tfbackend` の `<ACCOUNT_ID>` を対象アカウントIDに置き換える。
 
 ## 3. ECRだけ先に作る（初回のみ）
 
 ECRがないとイメージをpushできず、イメージがないとECSタスクを起動できない。初回だけECRリポジトリに対象を絞って作成する。
 
-```powershell
+PowerShell・bash共通:
+
+```text
 terraform -chdir=infra/env/dev init -backend-config=dev.s3.tfbackend
 terraform -chdir=infra/env/dev validate
 terraform -chdir=infra/env/dev plan -target=module.app.aws_ecr_repository.app
@@ -76,13 +95,28 @@ docker push $image
 $image
 ```
 
+Linux系（bash）:
+
+```bash
+repo_uri="$(aws ecr describe-repositories --repository-names next-js-ssr-dev-app --region ap-northeast-1 --query 'repositories[0].repositoryUri' --output text)"
+registry="${repo_uri%%/*}"
+image_tag="$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
+image="${repo_uri}:${image_tag}"
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin "$registry"
+docker build --platform linux/amd64 -f app/docker/Dockerfile -t "$image" app
+docker push "$image"
+printf '%s\n' "$image"
+```
+
 `next-js-ssr-dev-app` は `name_prefix = "next-js-ssr-dev"` の場合の名前。変更していればリポジトリ名を合わせる。CloudFrontのデフォルトドメインは画像の相対URLで使うため、`NEXT_PUBLIC_CDN_DOMAIN` のビルド時指定は不要。
 
 ## 5. 全体をapplyする
 
-`infra/env/dev/terraform.tfvars` の `container_image` を、手順4で表示された `$image` のURIに置き換える。planでイメージURIと作成対象を確認する。
+`infra/env/dev/terraform.tfvars` の `container_image` を、手順4で表示されたイメージURIに置き換える。planでイメージURIと作成対象を確認する。
 
-```powershell
+PowerShell・bash共通:
+
+```text
 terraform -chdir=infra/env/dev plan
 terraform -chdir=infra/env/dev apply
 terraform -chdir=infra/env/dev output
@@ -100,6 +134,16 @@ CloudFrontの作成と反映には時間がかかる。`IMAGES_BUCKET_NAME` は�
 $writer = terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint
 $bastion = terraform -chdir=infra/env/dev output -raw bastion_instance_id
 aws ssm start-session --target $bastion --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "host=$writer,portNumber=5432,localPortNumber=15432"
+```
+
+Linux系（bash）:
+
+```bash
+writer="$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)"
+bastion="$(terraform -chdir=infra/env/dev output -raw bastion_instance_id)"
+aws ssm start-session --target "$bastion" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"$writer\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
 ```
 
 ターミナルB（プロジェクトルートから）:
@@ -120,6 +164,25 @@ Set-Location app
 npm.cmd run db:migrate
 ```
 
+Linux系（bash）:
+
+```bash
+mkdir -p app/certs
+curl --fail --location --show-error https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o app/certs/global-bundle.pem
+export DB_WRITER_ENDPOINT=127.0.0.1
+export DB_SSL_SERVERNAME="$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)"
+export DB_PORT=15432
+export DB_SSL_MODE=verify-full
+export DB_SSL_CA_PATH=./certs/global-bundle.pem
+export DB_NAME=app
+export DB_USERNAME=postgres
+read -r -s -p 'Aurora DB password: ' DB_PASSWORD
+printf '\n'
+export DB_PASSWORD
+cd app
+npm run db:migrate
+```
+
 DB名・ユーザー名・パスワードは `terraform.tfvars` と同じ値にする。実行後はトンネルを終了し、DBパスワードを環境変数に残さないためターミナルBを閉じる。接続の詳細は [READMEのDB接続手順](README.md#dbへの接続踏み台経由) を参照する。
 
 ## 7. CloudFront経由で確認する
@@ -130,6 +193,14 @@ DB名・ユーザー名・パスワードは `terraform.tfvars` と同じ値に�
 $cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
 Invoke-WebRequest -UseBasicParsing "https://$cdn/"
 Invoke-RestMethod "https://$cdn/api/reports?page=1"
+```
+
+Linux系（bash）:
+
+```bash
+cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
+curl --fail --location "https://${cdn}/"
+curl --fail --location "https://${cdn}/api/reports?page=1"
 ```
 
 一覧APIが200でJSONを返すことを確認する。`https://<CloudFrontドメイン>/reports/new` から画像付きの日報を投稿し、一覧と記事ページで画像が表示されることも確認する。失敗時はECSサービスのイベント、停止タスクの理由、CloudWatch Logsの `/ecs/next-js-ssr-dev` を調べる。
