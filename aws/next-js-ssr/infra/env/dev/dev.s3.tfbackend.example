@@ -1,0 +1,3 @@
+# tfstateバケットの指定（backend "s3" の部分設定）
+# コピーして dev.s3.tfbackend を作り、<ACCOUNT_ID> を自分のアカウントIDに置き換える
+bucket = "next-js-ssr-tfstate-<ACCOUNT_ID>"
