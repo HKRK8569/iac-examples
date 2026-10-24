@@ -11,6 +11,28 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 - [ ] `terraform.tfvars` のDBパスワードを変更し、リソース名、サブネット、タグを確認した。`.tfvars`、`.tfbackend`、パスワードをGitに含めない
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
 
+AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
+
+PowerShell:
+
+```powershell
+$env:AWS_ACCESS_KEY_ID = '<アクセスキーID>'
+$env:AWS_SECRET_ACCESS_KEY = '<シークレットアクセスキー>'
+$env:AWS_DEFAULT_REGION = 'ap-northeast-1'
+# 一時的な認証情報の場合のみ
+# $env:AWS_SESSION_TOKEN = '<セッショントークン>'
+```
+
+Linux系（bash）:
+
+```bash
+export AWS_ACCESS_KEY_ID='<アクセスキーID>'
+export AWS_SECRET_ACCESS_KEY='<シークレットアクセスキー>'
+export AWS_DEFAULT_REGION='ap-northeast-1'
+# 一時的な認証情報の場合のみ
+# export AWS_SESSION_TOKEN='<セッショントークン>'
+```
+
 確認コマンド（PowerShell・bash共通）:
 
 ```text
