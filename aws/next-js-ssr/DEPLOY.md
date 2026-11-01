@@ -150,6 +150,26 @@ CloudFrontの作成と反映には時間がかかる。`IMAGES_BUCKET_NAME` は�
 
 初回applyだけでは `reports` テーブルは作成されない。踏み台のSSMトンネル経由でmigrationを実行する。ターミナルAでトンネルを開いたまま、ターミナルBでmigrationを実行する。
 
+ALBはDBに依存しない `/api/health` を確認するため、migration前でもタスクは正常になり得る。初回はCloudFront経由で `/api/health` が200、`/api/ready` が503であることを確認し、migration後に手順7で `/api/ready` の200を確認する。以下は新しいターミナルで実行する。
+
+PowerShell:
+
+```powershell
+$cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
+Invoke-RestMethod "https://$cdn/api/health"
+curl.exe --silent --show-error --output NUL --write-out '%{http_code}' "https://$cdn/api/ready"
+```
+
+Linux系（bash）:
+
+```bash
+cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
+curl --fail --silent --show-error "https://${cdn}/api/health"
+curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://${cdn}/api/ready"
+```
+
+この503はテーブル未作成による想定内の応答。ここでは `--fail` を付けず、出力が `503` であることを確認する。
+
 ターミナルA:
 
 ```powershell
@@ -213,6 +233,8 @@ DB名・ユーザー名・パスワードは `terraform.tfvars` と同じ値に�
 
 ```powershell
 $cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
+Invoke-RestMethod "https://$cdn/api/health"
+Invoke-RestMethod "https://$cdn/api/ready"
 Invoke-WebRequest -UseBasicParsing "https://$cdn/"
 Invoke-RestMethod "https://$cdn/api/reports?page=1"
 ```
@@ -221,13 +243,17 @@ Linux系（bash）:
 
 ```bash
 cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
+curl --fail --location "https://${cdn}/api/health"
+curl --fail --location "https://${cdn}/api/ready"
 curl --fail --location "https://${cdn}/"
 curl --fail --location "https://${cdn}/api/reports?page=1"
 ```
 
+`/api/health` が200で `{"status":"ok"}`、`/api/ready` が200で `{"status":"ready"}` を返すことを確認する。`/api/ready` はwriter / reader両方のDB接続・`reports` テーブルの読み取りを確認し、接続失敗・テーブル未作成・タイムアウト時は503で `{"status":"not_ready"}` を返す。接続とクエリの待ち時間はそれぞれ2秒、確認用の接続は毎回閉じる。両APIはキャッシュしない。readinessは読み取りの確認なので、投稿や画像アップロードは以下で別途確認する。
+
 一覧APIが200でJSONを返すことを確認する。`https://<CloudFrontドメイン>/reports/new` から画像付きの日報を投稿し、一覧と記事ページで画像が表示されることも確認する。失敗時はECSサービスのイベント、停止タスクの理由、CloudWatch Logsの `/ecs/next-js-ssr-dev` を調べる。
 
-現状のALBヘルスチェックは静的な `/` を見るため、タスクが正常表示でもDB処理は確認できない。ローカルの `localhost:3000` からS3へ直接PUTするCORS設定もまだないので、画像投稿の確認はCloudFrontドメインから行う。
+DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分けて扱う。CloudFrontの503エラーキャッシュもTTLを0に設定し、復旧後の確認で古い503を返さないようにする。DB障害でECSタスクの入れ替えを繰り返さないよう、ALBの確認先を `/api/ready` に変更しない。ローカルの `localhost:3000` からS3へ直接PUTするCORS設定もまだないので、画像投稿の確認はCloudFrontドメインから行う。
 
 ## 2回目以降の更新
 

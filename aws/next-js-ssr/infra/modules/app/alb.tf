@@ -49,10 +49,11 @@ resource "aws_lb_target_group" "this" {
   vpc_id      = var.vpc_id
   target_type = "ip"
 
+  # DBの準備状態は /api/ready で別途確認し、DB障害によるタスク入れ替えを避ける。
   health_check {
     protocol            = "HTTP"
-    path                = "/"
-    matcher             = "200-399"
+    path                = "/api/health"
+    matcher             = "200"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2

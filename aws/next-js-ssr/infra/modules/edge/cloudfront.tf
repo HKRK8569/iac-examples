@@ -10,6 +10,13 @@ resource "aws_cloudfront_distribution" "this" {
   enabled         = true
   is_ipv6_enabled = true
 
+  # readinessの503を残さず、migration・DB復旧後の応答を毎回確認する。
+  # CloudFrontは503ではCache-Control: no-storeだけでエラーキャッシュを無効化できない。
+  custom_error_response {
+    error_code            = 503
+    error_caching_min_ttl = 0
+  }
+
   # cloudFrontからS3へ接続(/images)
   origin {
     domain_name              = var.images_bucket_regional_domain_name
