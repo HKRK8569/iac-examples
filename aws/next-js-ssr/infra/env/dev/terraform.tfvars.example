@@ -5,6 +5,18 @@ name_prefix = "next-js-ssr-dev"
 # 冗長化フラグ（devはコスト削減のためOFF: NAT 1台・ECSタスク1つ・reader 0台）
 multi_az = false
 
+# CloudFrontの閲覧者IP制限。使う場合はtrueにし、例を実際の接続元CIDRに置き換える。
+# 有効時はIPv4・IPv6のどちらかに1件以上が必要。空のIP種別からのアクセスは拒否される。
+cloudfront_ip_restriction_enabled = false
+cloudfront_allowed_ipv4_cidrs     = [
+  # "203.0.113.10/32",
+  # "198.51.100.0/24",
+]
+cloudfront_allowed_ipv6_cidrs = [
+  # "2001:db8::10/128",
+  # "2001:db8:1234::/48",
+]
+
 tags = {
   Project   = "next-js-ssr"
   Env       = "dev"

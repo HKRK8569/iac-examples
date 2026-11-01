@@ -9,6 +9,7 @@ resource "aws_cloudfront_origin_access_control" "images" {
 resource "aws_cloudfront_distribution" "this" {
   enabled         = true
   is_ipv6_enabled = true
+  web_acl_id      = var.ip_restriction_enabled ? aws_wafv2_web_acl.ip_restriction[0].arn : null
 
   # readinessの503を残さず、migration・DB復旧後の応答を毎回確認する。
   # CloudFrontは503ではCache-Control: no-storeだけでエラーキャッシュを無効化できない。

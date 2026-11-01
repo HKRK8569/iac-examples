@@ -22,6 +22,28 @@ variable "tags" {
   default     = {}
 }
 
+# CloudFrontの閲覧者IP制限
+variable "cloudfront_ip_restriction_enabled" {
+  description = "CloudFrontへのアクセスを許可CIDRに限定する。trueの場合はIPv4・IPv6のいずれかに1件以上の許可CIDRが必要"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "cloudfront_allowed_ipv4_cidrs" {
+  description = "CloudFrontへのアクセスを許可するIPv4 CIDRの一覧（単一IPは/32、複数指定可能）"
+  type        = set(string)
+  default     = []
+  nullable    = false
+}
+
+variable "cloudfront_allowed_ipv6_cidrs" {
+  description = "CloudFrontへのアクセスを許可するIPv6 CIDRの一覧（単一IPは/128、複数指定可能）"
+  type        = set(string)
+  default     = []
+  nullable    = false
+}
+
 # VPC
 variable "vpc_cidr" {
   description = "VPCのCIDR (例: 10.0.0.0/16)"

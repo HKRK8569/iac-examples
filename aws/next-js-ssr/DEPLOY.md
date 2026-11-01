@@ -9,6 +9,7 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 - [ ] `ap-northeast-1` でAurora PostgreSQL `17.6` と `db.t4g.medium` が使えることを確認した。リージョン、AZ、VPC CIDR、継続的なAWS利用料金を確認した
 - [ ] tfstate用S3バケットを用意し、バージョニングとパブリックアクセス遮断を設定した
 - [ ] `terraform.tfvars` のDBパスワードを変更し、リソース名、サブネット、タグを確認した。`.tfvars`、`.tfbackend`、パスワードをGitに含めない
+- [ ] 閲覧者を限定する場合は `cloudfront_ip_restriction_enabled = true` とし、`cloudfront_allowed_ipv4_cidrs` / `cloudfront_allowed_ipv6_cidrs` に実際の許可CIDRを設定した（複数指定可能。設定例は[README](README.md#cloudfrontの閲覧者ip制限)）。有効時はWAFを管理する `us-east-1` 側の権限も必要
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
 
 AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
@@ -228,6 +229,8 @@ npm run db:migrate
 DB名・ユーザー名・パスワードは `terraform.tfvars` と同じ値にする。実行後はトンネルを終了し、DBパスワードを環境変数に残さないためターミナルBを閉じる。接続の詳細は [READMEのDB接続手順](README.md#dbへの接続踏み台経由) を参照する。
 
 ## 7. CloudFront経由で確認する
+
+IP制限を有効にした場合は、許可した接続元から以下を実行する。IPv4・IPv6の両方を指定した場合は各経路で正常にアクセスできること、許可していない接続元からはページ・API・画像取得が403になることを確認する。`curl -4` / `curl -6` で使用するIP種別を指定できる（各ネットワークへの接続が必要）。`/api/health` と `/api/ready` もCloudFront経由ではWAFの対象になる。ALBからECSへのヘルスチェックはCloudFrontを通らない。
 
 新しいターミナルをプロジェクトルートで開く。
 

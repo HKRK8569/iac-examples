@@ -23,6 +23,12 @@ provider "aws" {
   region = var.region
 }
 
+# CloudFront用WAFはus-east-1で管理する。
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 module "network" {
   source = "../../modules/network"
 
@@ -75,8 +81,17 @@ module "app" {
 module "edge" {
   source = "../../modules/edge"
 
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
   name_prefix = var.name_prefix
   tags        = var.tags
+
+  ip_restriction_enabled = var.cloudfront_ip_restriction_enabled
+  allowed_ipv4_cidrs     = var.cloudfront_allowed_ipv4_cidrs
+  allowed_ipv6_cidrs     = var.cloudfront_allowed_ipv6_cidrs
 
   alb_dns_name                       = module.app.alb_dns_name
   images_bucket_regional_domain_name = module.app.images_bucket_regional_domain_name
