@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getReport } from "@/db/queries/reports";
-import { formatReportDate } from "@/lib/date";
+import { ReportContent } from "@/components/report-content";
 import { imageUrl } from "@/lib/image";
 
 // 記事ページ（毎回SSR・キャッシュなし）
@@ -36,25 +36,14 @@ export default async function ReportPage({
         ← 一覧に戻る
       </Link>
 
-      <article className="mt-6">
-        <time className="block text-sm text-zinc-500">
-          {formatReportDate(report.reportedAt)}
-        </time>
-        <h1 className="mt-1 text-3xl font-bold">{report.title}</h1>
-
-        {src && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt=""
-            className="mt-6 w-full rounded-lg object-cover"
-          />
-        )}
-
-        <div className="mt-6 whitespace-pre-wrap leading-relaxed">
-          {report.body}
-        </div>
-      </article>
+      <div className="mt-6">
+        <ReportContent
+          title={report.title}
+          body={report.body}
+          reportedAt={report.reportedAt}
+          imageSrc={src}
+        />
+      </div>
     </div>
   );
 }

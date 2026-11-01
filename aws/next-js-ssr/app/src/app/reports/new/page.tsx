@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ReportForm } from "@/components/report-form";
 
 // アップロードページ（CSR）
-// 画像は署名付きURL経由でブラウザからS3へ直接アップロードする
+// 画像はローカル保存、または署名付きURL経由でS3へアップロードする。
 export default function NewReportPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">

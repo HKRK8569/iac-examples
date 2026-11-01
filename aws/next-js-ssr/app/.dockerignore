@@ -1,6 +1,7 @@
 # ホストのビルド成果物・依存はイメージに入れない（コンテナ内でnpm ciする）
 node_modules
 .next
+.local-images
 
 # 秘密情報・ローカル設定はイメージに焼き込まない
 .env*

@@ -24,6 +24,30 @@ infra/
     ├── app/              # ALB / ECS / Aurora / ECR / S3 / Secrets Manager
     └── edge/             # CloudFront / 閲覧者IP制限用WAF
 ```
+
+## ローカル起動手順(初回)
+
+Docker Desktop（Linuxコンテナ）とNode.js/npmを用意し、Docker Engineを起動しておく。
+以下はプロジェクトルートから実行する。既に `app/.env.local` がある場合はコピーを省略する。
+
+
+```bash
+cd app
+docker compose up -d
+cp .env.example .env.local
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+DBの起動完了後、migrationでテーブルを作成し、開発サーバーを起動する。
+ブラウザで [http://localhost:3000](http://localhost:3000) を開く。DBは `localhost:5433` に接続する。
+画像は選択時に `app/.local-images/` へ保存され、タイトルの下に表示される。「編集／プレビュー」で記事と同じ表示を確認でき、投稿後は記事画面へ移動する。
+ローカル保存にはAWS認証やS3は不要。保存した画像はサーバー再起動後も利用でき、Git・Dockerビルドの対象からは除外する。
+
+`npm run dev` は画像をローカルに保存する。明示する場合は `.env.local` に `IMAGE_STORAGE=local` を設定する。
+S3を使う場合は `IMAGE_STORAGE=s3` と実際の `IMAGES_BUCKET_NAME` を設定し、AWS認証・ローカルからのアクセス用CORS設定を用意する。本番は未指定時もS3を使う。
+
 ## デプロイ手順
 
 初回デプロイのチェックリスト、ECRへのpush、Terraformの適用順序、DB migration、動作確認は [DEPLOY.md](DEPLOY.md) を参照する。
