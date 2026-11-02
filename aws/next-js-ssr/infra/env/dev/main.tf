@@ -78,6 +78,11 @@ module "app" {
   db_username = var.db_username
   db_password = var.db_password
 
+  aurora_deletion_protection       = var.aurora_deletion_protection
+  alb_deletion_protection          = var.alb_deletion_protection
+  aurora_skip_final_snapshot       = var.aurora_skip_final_snapshot
+  aurora_final_snapshot_identifier = var.aurora_final_snapshot_identifier
+
   container_port  = var.container_port
   container_image = var.container_image
 

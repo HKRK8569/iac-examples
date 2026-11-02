@@ -71,6 +71,34 @@ variable "db_subnet_cidrs" {
   type        = list(string)
 }
 
+# 削除保護・最終スナップショット（入力の検証はappモジュールで行う）
+variable "aurora_deletion_protection" {
+  description = "Auroraクラスターの削除保護。prdではtrueにする"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "alb_deletion_protection" {
+  description = "ALBの削除保護。prdではtrueにする"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "aurora_skip_final_snapshot" {
+  description = "Aurora削除時に最終スナップショットを省略する。prdではfalseにする"
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "aurora_final_snapshot_identifier" {
+  description = "Auroraの最終スナップショット名。aurora_skip_final_snapshot=falseの場合は必須"
+  type        = string
+  default     = null
+}
+
 # aurora
 variable "db_name" {
   description = "DB名"

@@ -68,6 +68,27 @@ cloudfront_allowed_ipv6_cidrs = [
 ]
 ```
 
+## 削除保護と最終スナップショット
+
+各環境の `terraform.tfvars` から、Aurora・ALBの削除保護とAurora削除時の最終スナップショットを個別に設定する。
+既定値は従来のdevと同じで、削除保護OFF・最終スナップショット省略。環境名や `Env` タグからの自動切り替えは行わない。
+
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `aurora_deletion_protection` | `false` | Auroraクラスターの削除をAWS側で拒否する |
+| `alb_deletion_protection` | `false` | ALBの削除をAWS側で拒否する |
+| `aurora_skip_final_snapshot` | `true` | `false`にするとAurora削除時に最終スナップショットを保存する |
+| `aurora_final_snapshot_identifier` | `null` | 最終スナップショット名。保存する場合は必須 |
+
+prd環境を作成するときの設定例:
+
+```hcl
+aurora_deletion_protection       = true
+alb_deletion_protection          = true
+aurora_skip_final_snapshot       = false
+aurora_final_snapshot_identifier = "next-js-ssr-prd-final-001"
+```
+
 ## DBへの接続（踏み台経由）
 
 Auroraはインターネット経路のないDBサブネットにあるため、踏み台EC2を経由した

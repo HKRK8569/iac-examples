@@ -56,9 +56,10 @@ resource "aws_rds_cluster" "this" {
   # バックアップの保持日数
   backup_retention_period = 7
 
-  # サンプル用にdestroy時のスナップショット取得をスキップする
-  # 本番運用ではfalseにすること
-  skip_final_snapshot = true
+  # 削除保護を解除しても、最終スナップショットの保存設定は維持できる。
+  deletion_protection       = var.aurora_deletion_protection
+  skip_final_snapshot       = var.aurora_skip_final_snapshot
+  final_snapshot_identifier = var.aurora_skip_final_snapshot ? null : var.aurora_final_snapshot_identifier
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-postgres"

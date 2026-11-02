@@ -64,6 +64,48 @@ variable "bastion_security_group_id" {
   default     = null
 }
 
+# 削除保護・最終スナップショット
+variable "aurora_deletion_protection" {
+  description = "Auroraクラスターの削除保護。prdではtrueにする。DBインスタンス自体の削除は防がない"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "alb_deletion_protection" {
+  description = "ALBの削除保護。prdではtrueにする"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "aurora_skip_final_snapshot" {
+  description = "Aurora削除時に最終スナップショットを省略する。prdではfalseにし、削除保護とは独立して設定する"
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "aurora_final_snapshot_identifier" {
+  description = "Auroraの最終スナップショット名。保存する場合は必須。既存のスナップショットと重複しない名前を指定する"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.aurora_skip_final_snapshot || var.aurora_final_snapshot_identifier != null
+    error_message = "aurora_skip_final_snapshotをfalseにする場合は、aurora_final_snapshot_identifierを指定してください。"
+  }
+
+  validation {
+    condition = var.aurora_final_snapshot_identifier == null ? true : (
+      can(regex("^[A-Za-z][A-Za-z0-9-]{0,254}$", var.aurora_final_snapshot_identifier)) &&
+      !strcontains(var.aurora_final_snapshot_identifier, "--") &&
+      !endswith(var.aurora_final_snapshot_identifier, "-")
+    )
+    error_message = "aurora_final_snapshot_identifierは英字で始まる1〜255文字の英数字・ハイフンとし、末尾や連続したハイフンは使わないでください。"
+  }
+}
+
 # aurora
 variable "db_name" {
   description = "DB名"

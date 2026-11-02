@@ -12,6 +12,7 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 - [ ] 閲覧者を限定する場合は `cloudfront_ip_restriction_enabled = true` とし、`cloudfront_allowed_ipv4_cidrs` / `cloudfront_allowed_ipv6_cidrs` に実際の許可CIDRを設定した（複数指定可能。設定例は[README](README.md#cloudfrontの閲覧者ip制限)）。有効時はWAFを管理する `us-east-1` 側の権限も必要
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
 - [ ] CloudFront→ALBの秘密ヘッダー検証がplanに含まれ、ALBのデフォルト応答が403、秘密値一致時のみ転送になっている。秘密値は自動生成されるためtfvarsへの追記は不要。現構成はHTTP接続で、通信中の秘密値を保護するHTTPS化は別タスクであることを確認した
+- [ ] 環境ごとのAurora・ALBの削除保護と最終スナップショットの設定を確認した。既定値はdev向け。prdでは両方の削除保護をtrue、`aurora_skip_final_snapshot`をfalseにし、一意な`aurora_final_snapshot_identifier`を指定する（[設定例](README.md#削除保護と最終スナップショット)）
 
 AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
 
@@ -277,3 +278,15 @@ DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分け�
 ## 2回目以降の更新
 
 コード変更時は手順4で新しいタグをpushし、`container_image` を更新して手順5の全体plan・applyを実行する。DBスキーマを変更する場合は、既存アプリと両立するmigrationを先に適用し、その後に新しいイメージへ切り替える。
+
+## 環境を削除するとき
+
+削除保護が有効なリソースはAWS側で削除を拒否する。`terraform destroy` を先に実行すると、DBインスタンス・ECSなど保護対象外のリソースが削除されてから失敗する可能性がある。削除保護を、環境全体のdestroyを開始前に止める機能として扱わない。
+
+1. 対象環境・backend・削除予定のリソースを確認する。最終スナップショットを残す場合は、`aurora_skip_final_snapshot = false` とし、既存スナップショットと重複しない名前を `aurora_final_snapshot_identifier` に設定する。
+2. `aurora_deletion_protection` と `alb_deletion_protection` を `false` にする。スナップショットを保存する設定は変更しない。
+3. 通常の `terraform plan` で意図した変更だけであることを確認し、`terraform apply` で削除保護の解除とスナップショット設定を反映する。tfvarsの編集やdestroy時の変数指定だけでは、AWS上の保護は解除されない。
+4. AWS上でAuroraクラスターの `DeletionProtection` とALBの `deletion_protection.enabled` が無効になったことを確認する。
+5. `terraform plan -destroy` で削除対象を確認し、対象環境を削除する。最終スナップショットを保存する設定なら、削除後に指定した名前のスナップショットが利用可能になっていることを確認する。
+
+削除保護を有効にしたまま、動作確認だけのために本番環境のdestroyを実行しない。削除を伴う動作確認は、削除してよい検証環境で行う。
