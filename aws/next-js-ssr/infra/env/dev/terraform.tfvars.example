@@ -5,6 +5,10 @@ name_prefix = "next-js-ssr-dev"
 # 冗長化フラグ（devはコスト削減のためOFF: NAT 1台・ECSタスク1つ・reader 0台）
 multi_az = false
 
+# 踏み台は起動から60分後に自動停止する（SSM接続中でも停止）。無効にする場合はfalse。
+bastion_auto_stop_enabled       = true
+bastion_auto_stop_after_minutes = 60
+
 # 削除保護（devはOFF。prdでは両方trueにする）
 aurora_deletion_protection = false
 alb_deletion_protection    = false

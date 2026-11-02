@@ -13,6 +13,8 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
 - [ ] CloudFront→ALBの秘密ヘッダー検証がplanに含まれ、ALBのデフォルト応答が403、秘密値一致時のみ転送になっている。秘密値は自動生成されるためtfvarsへの追記は不要。現構成はHTTP接続で、通信中の秘密値を保護するHTTPS化は別タスクであることを確認した
 - [ ] 環境ごとのAurora・ALBの削除保護と最終スナップショットの設定を確認した。既定値はdev向け。prdでは両方の削除保護をtrue、`aurora_skip_final_snapshot`をfalseにし、一意な`aurora_final_snapshot_identifier`を指定する（[設定例](README.md#削除保護と最終スナップショット)）
+- [ ] 踏み台の自動停止設定を確認した。devの既定値は有効・起動から60分。SSMトンネルで長い作業を行う場合は `bastion_auto_stop_after_minutes` を事前に調整する。すでに起動中の踏み台へ導入する場合も、起動からの経過時間で停止する（[設定例](README.md#踏み台の自動停止)）
+- [ ] 自動停止用LambdaはJavaScriptのソースをTerraformで直接ZIP化する構成であることを確認した。デプロイ時のnpm操作・ビルドは不要。実行先はNode.js 24、AWS SDKはランタイム同梱のv3を利用する。ローカル検証は `npm --prefix functions/bastion-auto-stop ci` と `npm --prefix functions/bastion-auto-stop test` で実行できる
 
 AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
 
@@ -274,6 +276,20 @@ DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分け�
 端末からALBへの直接接続はSGで拒否されるため、403ではなく接続タイムアウトが想定される。ヘッダー検証による403の確認には、SGが許可するCloudFront経由の経路が必要。ヘルスチェック専用にヘッダー検証を回避するALBリスナールールは追加しない。
 
 秘密値を再生成する場合は、ALBが旧値と新値の両方を受け付ける状態にしてからCloudFrontを切り替え、反映後に旧値を削除する。`terraform apply -replace=random_password.origin_verify` だけでのローテーションは、更新中の403を避けられない。
+
+### 踏み台の自動停止の確認
+
+削除してよいdevなどの検証環境で確認する。動作確認中は踏み台のSSM接続とDBトンネルが切断されるため、migrationなどの作業は終了しておく。
+
+- [ ] 自動停止を有効にしてapplyし、Lambda・2つのEventBridgeルール・Schedulerグループが作成された
+- [ ] 踏み台を停止してから再び起動し、専用Schedulerグループに `stop-<インスタンスID>-<起動時刻のUnix秒>` の単発予約が作成された。時刻が最新の起動時刻＋設定分数を基準にしている
+- [ ] 設定分数の経過後に対象の踏み台だけが `stopping` / `stopped` になり、Lambdaログに `stop_requested` が記録された。実行済みの予約が自動削除された
+- [ ] 期限前に手動で停止・起動し直した場合、新しい起動時刻から予約され、古い予約で早く停止されない
+- [ ] 既存の起動中インスタンスや、停止時間の変更も、5分ごとの確認で最新の起動時刻を基準に反映される
+- [ ] `bastion_auto_stop_enabled = false` をapplyすると自動停止用リソースとグループ内の予約が削除され、踏み台自体は維持される
+
+検証時は停止時間を数分に短縮できるが、初回作成・予約欠落時の補完は5分間隔であり、Schedulerやイベント処理でも遅延する。検証後は希望する時間へ戻してapplyする。
+失敗時はCloudWatch Logsの `/aws/lambda/<name_prefix>-bastion-auto-stop` とEventBridgeルールの配信失敗を確認する。自動停止は普段の停止操作の補助であり、接続の有無ではなく起動からの時間で判定する。
 
 ## 2回目以降の更新
 

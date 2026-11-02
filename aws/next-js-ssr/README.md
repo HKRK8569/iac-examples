@@ -154,6 +154,27 @@ aws ec2 stop-instances --instance-ids $(terraform output -raw bastion_instance_i
 aws ec2 start-instances --instance-ids $(terraform output -raw bastion_instance_id)
 ```
 
+### 踏み台の自動停止
+
+devでは既定で、踏み台を起動してから60分後に自動停止する。各環境の `terraform.tfvars` で設定する。
+
+```hcl
+bastion_auto_stop_enabled       = true
+bastion_auto_stop_after_minutes = 60
+```
+
+Lambdaは `functions/bastion-auto-stop/src/` のJavaScript（`.mjs`）で管理し、Node.js 24で実行する。
+Terraformがソースを直接ZIP化するため、デプロイ時のnpm操作・ビルドは不要。AWS SDKはLambdaランタイム同梱のv3を利用し、そのバージョンはAWSが管理する。
+
+ローカルテストはNode.js 22.12以上（24推奨）で、プロジェクトルートから次を実行する。AWS SDKはローカルテスト用のdevDependenciesとして導入する。テストはVitestで実行し、テスト名は日本語で記述する。
+
+```text
+npm --prefix functions/bastion-auto-stop ci
+npm --prefix functions/bastion-auto-stop test
+```
+
+ZIPには `index.mjs` と `auto-stop.mjs` だけを格納し、テスト・npmパッケージ・依存ライブラリは含めない。テストで使うSDKはpackage-lock.jsonで固定し、Lambda同梱SDKのバージョンとは独立している。
+
 ## 削除方法
 
 ```

@@ -44,6 +44,21 @@ variable "cloudfront_allowed_ipv6_cidrs" {
   nullable    = false
 }
 
+# 踏み台の自動停止
+variable "bastion_auto_stop_enabled" {
+  description = "踏み台の自動停止を有効にする。devでは既定で有効"
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "bastion_auto_stop_after_minutes" {
+  description = "踏み台の起動から自動停止までの分数（1〜1440の整数）。SSM接続中でも停止する"
+  type        = number
+  default     = 60
+  nullable    = false
+}
+
 # VPC
 variable "vpc_cidr" {
   description = "VPCのCIDR (例: 10.0.0.0/16)"

@@ -53,6 +53,9 @@ module "bastion" {
   name_prefix = var.name_prefix
   tags        = var.tags
 
+  auto_stop_enabled       = var.bastion_auto_stop_enabled
+  auto_stop_after_minutes = var.bastion_auto_stop_after_minutes
+
   vpc_id = module.network.vpc_id
   # SSM接続にNATへの経路が必要なためappサブネットに配置（1AZに1台で十分）
   subnet_id = module.network.app_subnet_ids[0]
