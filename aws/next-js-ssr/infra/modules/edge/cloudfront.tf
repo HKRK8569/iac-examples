@@ -30,6 +30,13 @@ resource "aws_cloudfront_distribution" "this" {
     domain_name = var.alb_dns_name
     origin_id   = "alb-origin"
 
+    # 利用者に設定させず、CloudFrontからALBへ送るときだけ付与する。
+    # 通信中の秘密値を保護するHTTPS化は別途対応する。
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = var.origin_verify_secret
+    }
+
     custom_origin_config {
       http_port              = 80
       https_port             = 443

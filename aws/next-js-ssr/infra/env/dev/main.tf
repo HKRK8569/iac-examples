@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
   }
 
   # tfstate用のバケットは事前に手動で作成しておく（手順はREADME参照）
@@ -76,6 +80,8 @@ module "app" {
 
   container_port  = var.container_port
   container_image = var.container_image
+
+  origin_verify_secret = random_password.origin_verify.result
 }
 
 module "edge" {
@@ -92,6 +98,8 @@ module "edge" {
   ip_restriction_enabled = var.cloudfront_ip_restriction_enabled
   allowed_ipv4_cidrs     = var.cloudfront_allowed_ipv4_cidrs
   allowed_ipv6_cidrs     = var.cloudfront_allowed_ipv6_cidrs
+
+  origin_verify_secret = random_password.origin_verify.result
 
   alb_dns_name                       = module.app.alb_dns_name
   images_bucket_regional_domain_name = module.app.images_bucket_regional_domain_name

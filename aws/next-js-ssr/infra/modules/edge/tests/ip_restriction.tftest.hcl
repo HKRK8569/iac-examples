@@ -26,6 +26,7 @@ mock_provider "aws" {
 
 variables {
   name_prefix                        = "next-js-ssr-test"
+  origin_verify_secret               = "testOriginVerifySecret0123456789abcdef"
   alb_dns_name                       = "example.ap-northeast-1.elb.amazonaws.com"
   images_bucket_regional_domain_name = "next-js-ssr-test-images.s3.ap-northeast-1.amazonaws.com"
   images_bucket_id                   = "next-js-ssr-test-images"

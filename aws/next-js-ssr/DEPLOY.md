@@ -11,6 +11,7 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 - [ ] `terraform.tfvars` のDBパスワードを変更し、リソース名、サブネット、タグを確認した。`.tfvars`、`.tfbackend`、パスワードをGitに含めない
 - [ ] 閲覧者を限定する場合は `cloudfront_ip_restriction_enabled = true` とし、`cloudfront_allowed_ipv4_cidrs` / `cloudfront_allowed_ipv6_cidrs` に実際の許可CIDRを設定した（複数指定可能。設定例は[README](README.md#cloudfrontの閲覧者ip制限)）。有効時はWAFを管理する `us-east-1` 側の権限も必要
 - [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
+- [ ] CloudFront→ALBの秘密ヘッダー検証がplanに含まれ、ALBのデフォルト応答が403、秘密値一致時のみ転送になっている。秘密値は自動生成されるためtfvarsへの追記は不要。現構成はHTTP接続で、通信中の秘密値を保護するHTTPS化は別タスクであることを確認した
 
 AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
 
@@ -147,6 +148,8 @@ terraform -chdir=infra/env/dev output
 
 CloudFrontの作成と反映には時間がかかる。`IMAGES_BUCKET_NAME` は作成した画像バケット名からECSへ自動設定され、DB接続情報はSecrets Managerから注入される。`terraform.tfvars` は自動で読み込まれる。同じbackendなら2回目以降の `terraform init` に `-backend-config` の再指定は不要。
 
+CloudFront→ALBの検証用秘密値もTerraformが生成し、両側へ同じ値を設定する。値はtfstate・AWS側の設定に保存されるため、アクセスを限定する。既存環境への初回導入では、ALBのデフォルト拒否とCloudFrontのヘッダー設定の反映時刻がずれると一時的に403になる可能性がある。CloudFrontが `Deployed` になってから手順7を確認する。
+
 ## 6. DB migrationを適用する
 
 初回applyだけでは `reports` テーブルは作成されない。踏み台のSSMトンネル経由でmigrationを実行する。ターミナルAでトンネルを開いたまま、ターミナルBでmigrationを実行する。
@@ -257,6 +260,19 @@ curl --fail --location "https://${cdn}/api/reports?page=1"
 一覧APIが200でJSONを返すことを確認する。`https://<CloudFrontドメイン>/reports/new` から画像付きの日報を投稿し、一覧と記事ページで画像が表示されることも確認する。失敗時はECSサービスのイベント、停止タスクの理由、CloudWatch Logsの `/ecs/next-js-ssr-dev` を調べる。
 
 DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分けて扱う。CloudFrontの503エラーキャッシュもTTLを0に設定し、復旧後の確認で古い503を返さないようにする。DB障害でECSタスクの入れ替えを繰り返さないよう、ALBの確認先を `/api/ready` に変更しない。ローカルの `localhost:3000` からS3へ直接PUTするCORS設定もまだないので、画像投稿の確認はCloudFrontドメインから行う。
+
+### CloudFrontからALBへのアクセス制限の確認
+
+- [ ] 自分のCloudFront経由で `/api/health` が200になり、ページ・APIが利用できる
+- [ ] ALBターゲットグループが正常で、秘密ヘッダー検証によってECSのヘルスチェックが失敗していない
+- [ ] 検証用の別CloudFrontディストリビューションから同じALBへ転送した場合、秘密ヘッダーなし・誤った値の両方で `403 Access denied` になる
+- [ ] 一般の端末からALBへ直接接続した場合は、引き続きSGで接続が遮断される
+
+別CloudFrontでの確認には、ALBのDNS名をオリジンとする検証用ディストリビューションを使い、キャッシュを無効化してALBの応答を確認する。検証用には正しい秘密値を設定しない。オリジンへの接続プロトコルは実環境に合わせる（現構成ではHTTP）。検証後は検証用ディストリビューションを削除する。
+
+端末からALBへの直接接続はSGで拒否されるため、403ではなく接続タイムアウトが想定される。ヘッダー検証による403の確認には、SGが許可するCloudFront経由の経路が必要。ヘルスチェック専用にヘッダー検証を回避するALBリスナールールは追加しない。
+
+秘密値を再生成する場合は、ALBが旧値と新値の両方を受け付ける状態にしてからCloudFrontを切り替え、反映後に旧値を削除する。`terraform apply -replace=random_password.origin_verify` だけでのローテーションは、更新中の403を避けられない。
 
 ## 2回目以降の更新
 

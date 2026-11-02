@@ -22,7 +22,7 @@ output "db_subnet_ids" {
 # app
 output "alb_dns_name" {
   value       = module.app.alb_dns_name
-  description = "ALBのDNS名（CloudFront経由前の動作確認に使用）"
+  description = "ALBのDNS名（CloudFrontのオリジン・アクセス制限の確認に使用。端末からの直接接続はSGで遮断）"
 }
 
 output "ecr_repository_url" {

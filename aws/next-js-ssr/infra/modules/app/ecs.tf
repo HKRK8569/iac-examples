@@ -111,7 +111,8 @@ resource "aws_ecs_service" "this" {
   }
 
   depends_on = [
-    aws_lb_listener.http,
+    # リスナールールを作成して、ターゲットグループがALBに関連付いてから起動する。
+    aws_lb_listener_rule.cloudfront,
     aws_secretsmanager_secret_version.database,
     aws_iam_role_policy_attachment.ecs_task_execution,
     aws_iam_role_policy.ecs_task_execution_secrets,

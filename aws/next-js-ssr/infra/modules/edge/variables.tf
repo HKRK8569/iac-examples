@@ -53,6 +53,19 @@ variable "allowed_ipv6_cidrs" {
   }
 }
 
+# CloudFrontからのオリジンアクセス検証
+variable "origin_verify_secret" {
+  description = "ALBへ送るX-Origin-Verifyヘッダーの秘密値。appモジュールと同じ値を指定する"
+  type        = string
+  sensitive   = true
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{32,128}$", var.origin_verify_secret))
+    error_message = "origin_verify_secretには32〜128文字のランダムな半角英数字を指定してください。"
+  }
+}
+
 # origin（appモジュールのoutputをルートから受け取る）
 variable "alb_dns_name" {
   description = "オリジンにするALBのDNS名"
