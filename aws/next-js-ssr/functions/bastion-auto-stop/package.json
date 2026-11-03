@@ -1,0 +1,16 @@
+{
+  "name": "bastion-auto-stop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-ec2": "^3.0.0",
+    "@aws-sdk/client-scheduler": "^3.0.0",
+    "vitest": "^4.1.10"
+  }
+}

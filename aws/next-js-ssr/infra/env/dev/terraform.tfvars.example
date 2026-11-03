@@ -1,0 +1,86 @@
+# 共通
+region      = "ap-northeast-1"
+name_prefix = "next-js-ssr-dev"
+
+# 冗長化フラグ（devはコスト削減のためOFF: NAT 1台・ECSタスク1つ・reader 0台）
+multi_az = false
+
+# 踏み台は起動から60分後に自動停止する（SSM接続中でも停止）。無効にする場合はfalse。
+bastion_auto_stop_enabled       = true
+bastion_auto_stop_after_minutes = 60
+
+# 踏み台のインスタンスタイプ（AMIがarm64のためGraviton系のみ）
+bastion_instance_type = "t4g.nano"
+
+# 削除保護（devはOFF。prdでは両方trueにする）
+aurora_deletion_protection = false
+alb_deletion_protection    = false
+
+# 最終スナップショットは削除保護とは独立。prdではfalseにして一意な名前を指定する。
+aurora_skip_final_snapshot       = true
+aurora_final_snapshot_identifier = null
+
+# CloudFrontの閲覧者IP制限。使う場合はtrueにし、例を実際の接続元CIDRに置き換える。
+# 有効時はIPv4・IPv6のどちらかに1件以上が必要。空のIP種別からのアクセスは拒否される。
+cloudfront_ip_restriction_enabled = false
+cloudfront_allowed_ipv4_cidrs     = [
+  # "203.0.113.10/32",
+  # "198.51.100.0/24",
+]
+cloudfront_allowed_ipv6_cidrs = [
+  # "2001:db8::10/128",
+  # "2001:db8:1234::/48",
+]
+
+tags = {
+  Project   = "next-js-ssr"
+  Env       = "dev"
+  Terraform = "true"
+}
+
+# VPC
+vpc_cidr = "10.0.0.0/16"
+
+# subnet
+azs = [
+  "ap-northeast-1a",
+  "ap-northeast-1c"
+]
+
+public_subnet_cidrs = [
+  "10.0.1.0/24",
+  "10.0.2.0/24"
+]
+
+# アプリ用サブネット（ECS・踏み台を配置）
+app_subnet_cidrs = [
+  "10.0.101.0/24",
+  "10.0.102.0/24"
+]
+
+# DB用サブネット（NATへのルートなし。Auroraを配置）
+db_subnet_cidrs = [
+  "10.0.201.0/24",
+  "10.0.202.0/24"
+]
+
+# aurora
+db_name     = "app"
+db_username = "postgres"
+db_password = "CHANGE_ME" # 実際の値はコミットしないこと
+
+# Auroraのバージョンとインスタンスクラス（writer・reader共通）
+# 対象リージョンで新規作成できる組み合わせかをDEPLOY.mdの確認コマンドで確認する
+aurora_engine_version = "17.6"
+aurora_instance_class = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
+
+# ecs
+container_port = 3000
+
+# ECSタスクのCPU（1024 = 1 vCPU）とメモリ（MiB）。Fargateが許可する組み合わせのみ
+# 例: 256→512/1024/2048、512→1024〜4096、1024→2048〜8192（いずれも1024刻み）
+ecs_task_cpu    = 256
+ecs_task_memory = 512
+
+# ECRリポジトリ名は {name_prefix}-app（terraform output ecr_repository_url で確認できる）
+container_image = "{ACCOUNT_ID}.dkr.ecr.ap-northeast-1.amazonaws.com/next-js-ssr-dev-app:{TAG}"
