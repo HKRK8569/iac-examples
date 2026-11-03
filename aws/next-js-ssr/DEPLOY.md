@@ -4,19 +4,11 @@ PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-
 
 ## デプロイ前チェックリスト
 
-- [ ] Terraform 1.10.0以上、AWS CLI、Docker（Linuxコンテナ）、Node.js/npm、Session Manager pluginを用意し、Docker Engineを起動した
-- [ ] `aws sts get-caller-identity` で対象アカウントを確認した。Terraformのリソース作成、ECR push、S3 backend、SSM接続の権限がある
-- [ ] `ap-northeast-1` でAurora PostgreSQL `17.6` と `db.t4g.medium` が使えることを確認した。リージョン、AZ、VPC CIDR、継続的なAWS利用料金を確認した
-- [ ] tfstate用S3バケットを用意し、バージョニングとパブリックアクセス遮断を設定した
-- [ ] `terraform.tfvars` のDBパスワードを変更し、リソース名、サブネット、タグを確認した。`.tfvars`、`.tfbackend`、パスワードをGitに含めない
-- [ ] 閲覧者を限定する場合は `cloudfront_ip_restriction_enabled = true` とし、`cloudfront_allowed_ipv4_cidrs` / `cloudfront_allowed_ipv6_cidrs` に実際の許可CIDRを設定した（複数指定可能。設定例は[README](README.md#cloudfrontの閲覧者ip制限)）。有効時はWAFを管理する `us-east-1` 側の権限も必要
-- [ ] Dockerビルド環境からnpm、Google Fonts、RDSのCA証明書配布先へ接続できる
-- [ ] CloudFront→ALBの秘密ヘッダー検証がplanに含まれ、ALBのデフォルト応答が403、秘密値一致時のみ転送になっている。秘密値は自動生成されるためtfvarsへの追記は不要。現構成はHTTP接続で、通信中の秘密値を保護するHTTPS化は別タスクであることを確認した
-- [ ] 環境ごとのAurora・ALBの削除保護と最終スナップショットの設定を確認した。既定値はdev向け。prdでは両方の削除保護をtrue、`aurora_skip_final_snapshot`をfalseにし、一意な`aurora_final_snapshot_identifier`を指定する（[設定例](README.md#削除保護と最終スナップショット)）
-- [ ] 踏み台の自動停止設定を確認した。devの既定値は有効・起動から60分。SSMトンネルで長い作業を行う場合は `bastion_auto_stop_after_minutes` を事前に調整する。すでに起動中の踏み台へ導入する場合も、起動からの経過時間で停止する（[設定例](README.md#踏み台の自動停止)）
-- [ ] 自動停止用LambdaはJavaScriptのソースをTerraformで直接ZIP化する構成であることを確認した。デプロイ時のnpm操作・ビルドは不要。実行先はNode.js 24、AWS SDKはランタイム同梱のv3を利用する。ローカル検証は `npm --prefix functions/bastion-auto-stop ci` と `npm --prefix functions/bastion-auto-stop test` で実行できる
+- [ ] Terraform 1.10.0以上、AWS CLI、Session Manager plugin、Node.js/npmを入れ、Docker Engineを起動した
+- [ ] `aws sts get-caller-identity` で対象アカウントを確認した（リソース作成ができる権限があること）
+- [ ] 確認コマンドが一通り実行でき、確認コマンドの最後の2つで、Auroraのバージョンとインスタンスクラスが表示された（`None` ではない）
 
-AWSアクセスキーを使う場合は、以下を確認コマンドより前に実行する。環境変数はそのターミナルのセッション中だけ有効。手順6で別ターミナルを開く際も、そこでAWS CLIやTerraformを実行するなら同じ認証情報を設定する。キーをリポジトリ内のファイルに記載しない。
+AWSアクセスキーを使う場合のみ、確認コマンドの前に以下を実行する（SSOやプロファイルを使う場合は不要）。環境変数はそのターミナルのセッション中だけ有効。キーをリポジトリ内のファイルに記載しない。
 
 PowerShell:
 
@@ -50,7 +42,7 @@ aws rds describe-db-engine-versions --engine aurora-postgresql --engine-version 
 aws rds describe-orderable-db-instance-options --engine aurora-postgresql --engine-version 17.6 --db-instance-class db.t4g.medium --region ap-northeast-1 --query 'OrderableDBInstanceOptions[0].DBInstanceClass' --output text
 ```
 
-最後の2つが `None` なら、そのリージョンで利用可能なバージョンとクラスを調べてTerraformの設定を調整する。
+最後の2つは既定値（17.6・db.t4g.medium）の場合の例。`terraform.tfvars` の `aurora_engine_version` / `aurora_instance_class` を変更した場合はその値で確認する。`None` なら、そのリージョンで利用可能なバージョンとクラスを調べてtfvarsを調整する（[スペックの変更](README.md#ecsauroraのスペック)）。
 
 ## 1. tfstate用S3バケットを作る（初回のみ）
 
@@ -90,7 +82,7 @@ cp infra/env/dev/terraform.tfvars.example infra/env/dev/terraform.tfvars
 cp infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
 ```
 
-`infra/env/dev/terraform.tfvars` の `db_password` を実際の値にする。`container_image` は手順4のpush後に設定するので、この時点ではプレースホルダーのままでよい。`infra/env/dev/dev.s3.tfbackend` の `<ACCOUNT_ID>` を対象アカウントIDに置き換える。
+`infra/env/dev/terraform.tfvars` の `db_password` を `CHANGE_ME` から実際の値に変更する。8〜128文字で、`/`・`"`・`@`・空白は使えない（Auroraの作成時にエラーになる）。`container_image` は手順4のpush後に設定するので、この時点ではプレースホルダーのままでよい。`infra/env/dev/dev.s3.tfbackend` の `<ACCOUNT_ID>` を対象アカウントIDに置き換える。
 
 ## 3. ECRだけ先に作る（初回のみ）
 
@@ -294,6 +286,34 @@ DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分け�
 ## 2回目以降の更新
 
 コード変更時は手順4で新しいタグをpushし、`container_image` を更新して手順5の全体plan・applyを実行する。DBスキーマを変更する場合は、既存アプリと両立するmigrationを先に適用し、その後に新しいイメージへ切り替える。
+
+### イメージ更新後のCloudFrontキャッシュ削除
+
+一覧・投稿ページの静的シェルと `_next/static/*` は、CloudFrontで最大1時間キャッシュされる。新しいイメージには前のビルドのJS・CSSが含まれないため、古いシェルがエッジに残ると、参照先のアセットが404になり画面が崩れる可能性がある。イメージを切り替えたら、ECSの入れ替え完了を待ってからキャッシュを削除する。
+
+Terraformの `apply` はECSサービスの入れ替え完了を待たない。入れ替え中にキャッシュを削除すると、旧タスクの応答が再びキャッシュされる可能性があるため、`services-stable` の完了後に実行する。
+
+PowerShell:
+
+```powershell
+$cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
+aws ecs wait services-stable --cluster next-js-ssr-dev-ecs-cluster --services next-js-ssr-dev-service --region ap-northeast-1
+$distributionId = aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='$cdn'].Id | [0]" --output text
+aws cloudfront create-invalidation --distribution-id $distributionId --paths '/*'
+```
+
+Linux系（bash）:
+
+```bash
+cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
+aws ecs wait services-stable --cluster next-js-ssr-dev-ecs-cluster --services next-js-ssr-dev-service --region ap-northeast-1
+distribution_id="$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='${cdn}'].Id | [0]" --output text)"
+aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths '/*'
+```
+
+クラスター名・サービス名は `name_prefix = "next-js-ssr-dev"` の場合の値。変更していれば合わせる。`services-stable` は最大10分で待機を終了するため、タイムアウトした場合はECSサービスのイベントを確認してから再実行する。キャッシュ削除の完了は `aws cloudfront get-invalidation --distribution-id <ID> --id <Invalidation ID>` の `Status` が `Completed` になったことで確認する。`/*` の指定は1パスとして数えられ、月1,000パスまでは無料。
+
+画像（`/images/*`）は毎回新しいキーで保存されるため、キャッシュ削除がなくても古い画像は表示されない。ブラウザ側では `_next/static/*` をファイル名のハッシュで区別するため、ブラウザキャッシュの削除は不要。
 
 ## 環境を削除するとき
 
