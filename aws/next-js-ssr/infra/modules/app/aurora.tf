@@ -45,7 +45,7 @@ resource "aws_security_group" "aurora" {
 resource "aws_rds_cluster" "this" {
   cluster_identifier = "${var.name_prefix}-postgres"
   engine             = "aurora-postgresql"
-  engine_version     = "17.6"
+  engine_version     = var.aurora_engine_version
   database_name      = var.db_name
   master_username    = var.db_username
   master_password    = var.db_password
@@ -68,13 +68,15 @@ resource "aws_rds_cluster" "this" {
 
 # writerの設定
 resource "aws_rds_cluster_instance" "writer" {
-  identifier          = "${var.name_prefix}-postgres-writer"
-  cluster_identifier  = aws_rds_cluster.this.id
-  count               = 1
-  instance_class      = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
-  engine              = aws_rds_cluster.this.engine
-  engine_version      = aws_rds_cluster.this.engine_version
-  publicly_accessible = false
+  identifier         = "${var.name_prefix}-postgres-writer"
+  cluster_identifier = aws_rds_cluster.this.id
+  count              = 1
+  instance_class     = var.aurora_instance_class
+  # バージョンはaurora_engine_versionで管理する。自動で上がるとtfvarsとずれ、ダウングレードできずapplyが失敗する
+  auto_minor_version_upgrade = false
+  engine                     = aws_rds_cluster.this.engine
+  engine_version             = aws_rds_cluster.this.engine_version
+  publicly_accessible        = false
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-postgres-writer"
@@ -85,13 +87,15 @@ resource "aws_rds_cluster_instance" "writer" {
 # readerの設定
 # 冗長化OFFのときは作らない（writerのみ）
 resource "aws_rds_cluster_instance" "reader" {
-  count               = var.multi_az ? 1 : 0
-  identifier          = "${var.name_prefix}-postgres-reader-${count.index + 1}"
-  cluster_identifier  = aws_rds_cluster.this.id
-  instance_class      = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
-  engine              = aws_rds_cluster.this.engine
-  engine_version      = aws_rds_cluster.this.engine_version
-  publicly_accessible = false
+  count              = var.multi_az ? 1 : 0
+  identifier         = "${var.name_prefix}-postgres-reader-${count.index + 1}"
+  cluster_identifier = aws_rds_cluster.this.id
+  instance_class     = var.aurora_instance_class
+  # バージョンはaurora_engine_versionで管理する。自動で上がるとtfvarsとずれ、ダウングレードできずapplyが失敗する
+  auto_minor_version_upgrade = false
+  engine                     = aws_rds_cluster.this.engine
+  engine_version             = aws_rds_cluster.this.engine_version
+  publicly_accessible        = false
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-postgres-reader-${count.index + 1}"

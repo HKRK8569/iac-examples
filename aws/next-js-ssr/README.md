@@ -89,6 +89,20 @@ aurora_skip_final_snapshot       = false
 aurora_final_snapshot_identifier = "next-js-ssr-prd-final-001"
 ```
 
+## ECS・Auroraのスペック
+
+各環境の `terraform.tfvars` から、ECSタスク・Aurora・踏み台のスペックを設定する
+
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `ecs_task_cpu` | `256` | ECSタスクのCPUユニット（1024 = 1 vCPU） |
+| `ecs_task_memory` | `512` | ECSタスクのメモリ（MiB）。CPUごとにFargateが許可する値のみ |
+| `aurora_engine_version` | `"17.6"` | Aurora PostgreSQLのバージョン。自動マイナーアップグレードは無効のため、上げるときはこの値を変更する |
+| `aurora_instance_class` | `"db.t4g.medium"` | Auroraのwriter・readerのインスタンスクラス（共通） |
+| `bastion_instance_type` | `"t4g.nano"` | 踏み台のインスタンスタイプ。AMIがarm64のためGraviton系のみ |
+
+
+
 ## DBへの接続（踏み台経由）
 
 Auroraはインターネット経路のないDBサブネットにあるため、踏み台EC2を経由した

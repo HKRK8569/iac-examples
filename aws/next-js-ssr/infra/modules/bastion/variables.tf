@@ -23,9 +23,15 @@ variable "subnet_id" {
 
 # ec2
 variable "instance_type" {
-  description = "踏み台のインスタンスタイプ"
+  description = "踏み台のインスタンスタイプ。AMIがarm64のためGraviton系（t4g・m7g等）を指定する"
   type        = string
   default     = "t4g.nano"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z]+[0-9]+g[a-z0-9-]*\\.[a-z0-9]+$", var.instance_type))
+    error_message = "instance_typeにはarm64のGraviton系インスタンスタイプを指定してください（例: t4g.nano、t4g.micro、m7g.medium）。"
+  }
 }
 
 variable "auto_stop_enabled" {

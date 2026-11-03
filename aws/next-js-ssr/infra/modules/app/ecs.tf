@@ -30,8 +30,8 @@ resource "aws_ecs_task_definition" "this" {
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
 
-  cpu    = 256
-  memory = 512
+  cpu    = var.ecs_task_cpu
+  memory = var.ecs_task_memory
 
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
   # アプリ自身がAWS APIを呼ぶ用（S3の署名付きURL発行など）

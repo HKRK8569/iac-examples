@@ -123,6 +123,33 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "aurora_engine_version" {
+  description = "Aurora PostgreSQLのバージョン（例: 17.6）。対象リージョンで新規作成できるバージョンを指定する"
+  type        = string
+  default     = "17.6"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+$", var.aurora_engine_version))
+    error_message = "aurora_engine_versionは「メジャー.マイナー」形式で指定してください（例: 17.6）。"
+  }
+}
+
+variable "aurora_instance_class" {
+  description = "Auroraのwriter・readerのインスタンスクラス（例: db.t4g.medium）。Serverless v2は未対応"
+  type        = string
+  default     = "db.t4g.medium"
+  nullable    = false
+
+  validation {
+    condition = (
+      can(regex("^db\\.[a-z][a-z0-9-]*\\.[a-z0-9]+$", var.aurora_instance_class)) &&
+      var.aurora_instance_class != "db.serverless"
+    )
+    error_message = "aurora_instance_classはdb.<ファミリー>.<サイズ>形式で指定してください（例: db.t4g.medium）。db.serverlessは未対応です。"
+  }
+}
+
 # ecs
 variable "container_port" {
   description = "ecsのポート"
@@ -133,4 +160,41 @@ variable "container_port" {
 variable "container_image" {
   description = "コンテナイメージ（ECRのURI:タグ）"
   type        = string
+}
+
+# Fargate（Linux / x86_64）で指定できるCPU・メモリの組み合わせ（MiB）
+locals {
+  fargate_memory_options = {
+    256   = [512, 1024, 2048]
+    512   = [for gb in range(1, 5) : gb * 1024]
+    1024  = [for gb in range(2, 9) : gb * 1024]
+    2048  = [for gb in range(4, 17) : gb * 1024]
+    4096  = [for gb in range(8, 31) : gb * 1024]
+    8192  = [for gb in range(16, 61, 4) : gb * 1024]
+    16384 = [for gb in range(32, 121, 8) : gb * 1024]
+  }
+}
+
+variable "ecs_task_cpu" {
+  description = "ECSタスクのCPUユニット（1024 = 1 vCPU）。256 / 512 / 1024 / 2048 / 4096 / 8192 / 16384"
+  type        = number
+  default     = 256
+  nullable    = false
+
+  validation {
+    condition     = contains([256, 512, 1024, 2048, 4096, 8192, 16384], var.ecs_task_cpu)
+    error_message = "ecs_task_cpuは256 / 512 / 1024 / 2048 / 4096 / 8192 / 16384のいずれかを指定してください。"
+  }
+}
+
+variable "ecs_task_memory" {
+  description = "ECSタスクのメモリ（MiB）。ecs_task_cpuごとにFargateが許可する値を指定する"
+  type        = number
+  default     = 512
+  nullable    = false
+
+  validation {
+    condition     = contains(lookup(local.fargate_memory_options, tostring(var.ecs_task_cpu), []), var.ecs_task_memory)
+    error_message = "ecs_task_memoryはecs_task_cpuに対応する値を指定してください（例: 256→512/1024/2048、512→1024〜4096、1024→2048〜8192。いずれも1024刻み）。"
+  }
 }

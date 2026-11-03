@@ -44,6 +44,14 @@ variable "cloudfront_allowed_ipv6_cidrs" {
   nullable    = false
 }
 
+# 踏み台（入力の検証はbastionモジュールで行う）
+variable "bastion_instance_type" {
+  description = "踏み台のインスタンスタイプ。arm64のGraviton系（t4g等）を指定する"
+  type        = string
+  default     = "t4g.nano"
+  nullable    = false
+}
+
 # 踏み台の自動停止
 variable "bastion_auto_stop_enabled" {
   description = "踏み台の自動停止を有効にする。devでは既定で有効"
@@ -131,6 +139,21 @@ variable "db_password" {
   sensitive   = true
 }
 
+# Auroraのスペック（入力の検証はappモジュールで行う）
+variable "aurora_engine_version" {
+  description = "Aurora PostgreSQLのバージョン（例: 17.6）"
+  type        = string
+  default     = "17.6"
+  nullable    = false
+}
+
+variable "aurora_instance_class" {
+  description = "Auroraのwriter・readerのインスタンスクラス"
+  type        = string
+  default     = "db.t4g.medium"
+  nullable    = false
+}
+
 # ecs
 variable "container_port" {
   description = "コンテナのポート"
@@ -141,4 +164,19 @@ variable "container_port" {
 variable "container_image" {
   description = "コンテナイメージ（ECRのURI:タグ）"
   type        = string
+}
+
+# ECSタスクのスペック（入力の検証はappモジュールで行う）
+variable "ecs_task_cpu" {
+  description = "ECSタスクのCPUユニット（1024 = 1 vCPU）"
+  type        = number
+  default     = 256
+  nullable    = false
+}
+
+variable "ecs_task_memory" {
+  description = "ECSタスクのメモリ（MiB）。ecs_task_cpuに対応する値を指定する"
+  type        = number
+  default     = 512
+  nullable    = false
 }

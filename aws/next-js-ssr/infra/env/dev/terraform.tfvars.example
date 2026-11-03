@@ -9,6 +9,9 @@ multi_az = false
 bastion_auto_stop_enabled       = true
 bastion_auto_stop_after_minutes = 60
 
+# 踏み台のインスタンスタイプ（AMIがarm64のためGraviton系のみ）
+bastion_instance_type = "t4g.nano"
+
 # 削除保護（devはOFF。prdでは両方trueにする）
 aurora_deletion_protection = false
 alb_deletion_protection    = false
@@ -66,8 +69,18 @@ db_name     = "app"
 db_username = "postgres"
 db_password = "CHANGE_ME" # 実際の値はコミットしないこと
 
+# Auroraのバージョンとインスタンスクラス（writer・reader共通）
+# 対象リージョンで新規作成できる組み合わせかをDEPLOY.mdの確認コマンドで確認する
+aurora_engine_version = "17.6"
+aurora_instance_class = "db.t4g.medium" # Aurora PostgreSQLの最小クラス（microは使用不可）
+
 # ecs
 container_port = 3000
+
+# ECSタスクのCPU（1024 = 1 vCPU）とメモリ（MiB）。Fargateが許可する組み合わせのみ
+# 例: 256→512/1024/2048、512→1024〜4096、1024→2048〜8192（いずれも1024刻み）
+ecs_task_cpu    = 256
+ecs_task_memory = 512
 
 # ECRリポジトリ名は {name_prefix}-app（terraform output ecr_repository_url で確認できる）
 container_image = "{ACCOUNT_ID}.dkr.ecr.ap-northeast-1.amazonaws.com/next-js-ssr-dev-app:{TAG}"

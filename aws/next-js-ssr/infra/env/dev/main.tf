@@ -53,6 +53,7 @@ module "bastion" {
   name_prefix = var.name_prefix
   tags        = var.tags
 
+  instance_type           = var.bastion_instance_type
   auto_stop_enabled       = var.bastion_auto_stop_enabled
   auto_stop_after_minutes = var.bastion_auto_stop_after_minutes
 
@@ -81,6 +82,9 @@ module "app" {
   db_username = var.db_username
   db_password = var.db_password
 
+  aurora_engine_version = var.aurora_engine_version
+  aurora_instance_class = var.aurora_instance_class
+
   aurora_deletion_protection       = var.aurora_deletion_protection
   alb_deletion_protection          = var.alb_deletion_protection
   aurora_skip_final_snapshot       = var.aurora_skip_final_snapshot
@@ -88,6 +92,8 @@ module "app" {
 
   container_port  = var.container_port
   container_image = var.container_image
+  ecs_task_cpu    = var.ecs_task_cpu
+  ecs_task_memory = var.ecs_task_memory
 
   origin_verify_secret = random_password.origin_verify.result
 }
