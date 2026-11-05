@@ -1,26 +1,14 @@
 # dev環境のデプロイ手順
 
-PowerShellまたはLinux系のbashで、プロジェクトルート（`aws/next-js-ssr`）から実行する。現在ある環境定義は `infra/env/dev` のみ。初回はECRだけ先に作成し、イメージをpushしてから全体をapplyする。
+Linux系のbashで、プロジェクトルート（`aws/next-js-ssr`）から実行する。現在ある環境定義は `infra/env/dev` のみ。初回はECRだけ先に作成し、イメージをpushしてから全体をapplyする。
 
 ## デプロイ前チェックリスト
 
-- [ ] Terraform 1.10.0以上、AWS CLI、Session Manager plugin、Node.js/npmを入れ、Docker Engineを起動した
+- [ ] Terraform 1.10.0以上、AWS CLI、Session Manager plugin、Node.js/npmを入れ、Dockerが起動している
 - [ ] `aws sts get-caller-identity` で対象アカウントを確認した（リソース作成ができる権限があること）
 - [ ] 確認コマンドが一通り実行でき、確認コマンドの最後の2つで、Auroraのバージョンとインスタンスクラスが表示された（`None` ではない）
 
 AWSアクセスキーを使う場合のみ、確認コマンドの前に以下を実行する（SSOやプロファイルを使う場合は不要）。環境変数はそのターミナルのセッション中だけ有効。キーをリポジトリ内のファイルに記載しない。
-
-PowerShell:
-
-```powershell
-$env:AWS_ACCESS_KEY_ID = '<アクセスキーID>'
-$env:AWS_SECRET_ACCESS_KEY = '<シークレットアクセスキー>'
-$env:AWS_DEFAULT_REGION = 'ap-northeast-1'
-# 一時的な認証情報の場合のみ
-# $env:AWS_SESSION_TOKEN = '<セッショントークン>'
-```
-
-Linux系（bash）:
 
 ```bash
 export AWS_ACCESS_KEY_ID='<アクセスキーID>'
@@ -30,11 +18,12 @@ export AWS_DEFAULT_REGION='ap-northeast-1'
 # export AWS_SESSION_TOKEN='<セッショントークン>'
 ```
 
-確認コマンド（PowerShell・bash共通）:
+確認コマンド:
 
-```text
+```bash
 terraform version
 aws --version
+session-manager-plugin --version
 docker info --format '{{.ServerVersion}}'
 node --version
 aws sts get-caller-identity
@@ -48,16 +37,6 @@ aws rds describe-orderable-db-instance-options --engine aurora-postgresql --engi
 
 既に専用バケットがあれば作成を飛ばす。tfstateにはDBパスワードなどが含まれる。S3 backendのバケットはTerraformの管理外で先に作成する。
 
-```powershell
-$accountId = aws sts get-caller-identity --query Account --output text
-$stateBucket = "next-js-ssr-tfstate-$accountId"
-aws s3api create-bucket --bucket $stateBucket --region ap-northeast-1 --create-bucket-configuration LocationConstraint=ap-northeast-1
-aws s3api put-bucket-versioning --bucket $stateBucket --versioning-configuration Status=Enabled
-aws s3api put-public-access-block --bucket $stateBucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'
-```
-
-Linux系（bash）:
-
 ```bash
 account_id="$(aws sts get-caller-identity --query Account --output text)"
 state_bucket="next-js-ssr-tfstate-${account_id}"
@@ -70,13 +49,6 @@ aws s3api put-public-access-block --bucket "$state_bucket" --public-access-block
 
 既に `terraform.tfvars` と `dev.s3.tfbackend` がある場合はコピーせず再利用する。
 
-```powershell
-Copy-Item infra/env/dev/terraform.tfvars.example infra/env/dev/terraform.tfvars
-Copy-Item infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
-```
-
-Linux系（bash）:
-
 ```bash
 cp infra/env/dev/terraform.tfvars.example infra/env/dev/terraform.tfvars
 cp infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
@@ -88,40 +60,22 @@ cp infra/env/dev/dev.s3.tfbackend.example infra/env/dev/dev.s3.tfbackend
 
 ECRがないとイメージをpushできず、イメージがないとECSタスクを起動できない。初回だけECRリポジトリに対象を絞って作成する。
 
-PowerShell・bash共通:
-
-```text
+```bash
 terraform -chdir=infra/env/dev init -backend-config=dev.s3.tfbackend
 terraform -chdir=infra/env/dev validate
 terraform -chdir=infra/env/dev plan -target=module.app.aws_ecr_repository.app
 terraform -chdir=infra/env/dev apply -target=module.app.aws_ecr_repository.app
 ```
 
-`-target` は初回の作成順序を解決するためだけに使う。その後は必ず全体のplan・applyを実行する。既存のtfstateをS3へ移行する場合は、`init` が提示する移行内容を確認する。
-
 ## 4. DockerイメージをビルドしてECRへpushする
 
 ECRはタグの上書きを禁止しているため、毎回新しいタグを使う。Dockerfileは `app/docker/Dockerfile`、ビルドコンテキストは `app`。
 
-```powershell
-$repoUri = aws ecr describe-repositories --repository-names next-js-ssr-dev-app --region ap-northeast-1 --query 'repositories[0].repositoryUri' --output text
-$registry = $repoUri.Split('/')[0]
-$imageTag = "$(git rev-parse --short HEAD)-$(Get-Date -Format 'yyyyMMddHHmmss')"
-$image = "${repoUri}:${imageTag}"
-aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $registry
-docker build --platform linux/amd64 -f app/docker/Dockerfile -t $image app
-docker push $image
-$image
-```
-
-Linux系（bash）:
-
 ```bash
 repo_uri="$(aws ecr describe-repositories --repository-names next-js-ssr-dev-app --region ap-northeast-1 --query 'repositories[0].repositoryUri' --output text)"
-registry="${repo_uri%%/*}"
 image_tag="$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
 image="${repo_uri}:${image_tag}"
-aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin "$registry"
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin "${repo_uri%%/*}"
 docker build --platform linux/amd64 -f app/docker/Dockerfile -t "$image" app
 docker push "$image"
 printf '%s\n' "$image"
@@ -133,9 +87,7 @@ printf '%s\n' "$image"
 
 `infra/env/dev/terraform.tfvars` の `container_image` を、手順4で表示されたイメージURIに置き換える。planでイメージURIと作成対象を確認する。
 
-PowerShell・bash共通:
-
-```text
+```bash
 terraform -chdir=infra/env/dev plan
 terraform -chdir=infra/env/dev apply
 terraform -chdir=infra/env/dev output
@@ -151,16 +103,6 @@ CloudFront→ALBの検証用秘密値もTerraformが生成し、両側へ同じ�
 
 ALBはDBに依存しない `/api/health` を確認するため、migration前でもタスクは正常になり得る。初回はCloudFront経由で `/api/health` が200、`/api/ready` が503であることを確認し、migration後に手順7で `/api/ready` の200を確認する。以下は新しいターミナルで実行する。
 
-PowerShell:
-
-```powershell
-$cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
-Invoke-RestMethod "https://$cdn/api/health"
-curl.exe --silent --show-error --output NUL --write-out '%{http_code}' "https://$cdn/api/ready"
-```
-
-Linux系（bash）:
-
 ```bash
 cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
 curl --fail --silent --show-error "https://${cdn}/api/health"
@@ -171,14 +113,6 @@ curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https:
 
 ターミナルA:
 
-```powershell
-$writer = terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint
-$bastion = terraform -chdir=infra/env/dev output -raw bastion_instance_id
-aws ssm start-session --target $bastion --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "host=$writer,portNumber=5432,localPortNumber=15432"
-```
-
-Linux系（bash）:
-
 ```bash
 writer="$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)"
 bastion="$(terraform -chdir=infra/env/dev output -raw bastion_instance_id)"
@@ -188,24 +122,6 @@ aws ssm start-session --target "$bastion" \
 ```
 
 ターミナルB（プロジェクトルートから）:
-
-```powershell
-New-Item -ItemType Directory -Force app/certs | Out-Null
-Invoke-WebRequest -Uri https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -OutFile app/certs/global-bundle.pem
-$env:DB_WRITER_ENDPOINT = '127.0.0.1'
-$env:DB_SSL_SERVERNAME = terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint
-$env:DB_PORT = '15432'
-$env:DB_SSL_MODE = 'verify-full'
-$env:DB_SSL_CA_PATH = './certs/global-bundle.pem'
-$env:DB_NAME = 'app'
-$env:DB_USERNAME = 'postgres'
-$securePassword = Read-Host 'Aurora DB password' -AsSecureString
-$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
-Set-Location app
-npm.cmd run db:migrate
-```
-
-Linux系（bash）:
 
 ```bash
 mkdir -p app/certs
@@ -231,16 +147,6 @@ DB名・ユーザー名・パスワードは `terraform.tfvars` と同じ値に�
 IP制限を有効にした場合は、許可した接続元から以下を実行する。IPv4・IPv6の両方を指定した場合は各経路で正常にアクセスできること、許可していない接続元からはページ・API・画像取得が403になることを確認する。`curl -4` / `curl -6` で使用するIP種別を指定できる（各ネットワークへの接続が必要）。`/api/health` と `/api/ready` もCloudFront経由ではWAFの対象になる。ALBからECSへのヘルスチェックはCloudFrontを通らない。
 
 新しいターミナルをプロジェクトルートで開く。
-
-```powershell
-$cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
-Invoke-RestMethod "https://$cdn/api/health"
-Invoke-RestMethod "https://$cdn/api/ready"
-Invoke-WebRequest -UseBasicParsing "https://$cdn/"
-Invoke-RestMethod "https://$cdn/api/reports?page=1"
-```
-
-Linux系（bash）:
 
 ```bash
 cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
@@ -292,17 +198,6 @@ DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分け�
 一覧・投稿ページの静的シェルと `_next/static/*` は、CloudFrontで最大1時間キャッシュされる。新しいイメージには前のビルドのJS・CSSが含まれないため、古いシェルがエッジに残ると、参照先のアセットが404になり画面が崩れる可能性がある。イメージを切り替えたら、ECSの入れ替え完了を待ってからキャッシュを削除する。
 
 Terraformの `apply` はECSサービスの入れ替え完了を待たない。入れ替え中にキャッシュを削除すると、旧タスクの応答が再びキャッシュされる可能性があるため、`services-stable` の完了後に実行する。
-
-PowerShell:
-
-```powershell
-$cdn = terraform -chdir=infra/env/dev output -raw cloudfront_domain_name
-aws ecs wait services-stable --cluster next-js-ssr-dev-ecs-cluster --services next-js-ssr-dev-service --region ap-northeast-1
-$distributionId = aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='$cdn'].Id | [0]" --output text
-aws cloudfront create-invalidation --distribution-id $distributionId --paths '/*'
-```
-
-Linux系（bash）:
 
 ```bash
 cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
