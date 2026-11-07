@@ -83,6 +83,14 @@ printf '%s\n' "$image"
 
 `next-js-ssr-dev-app` は `name_prefix = "next-js-ssr-dev"` の場合の名前。変更していればリポジトリ名を合わせる。CloudFrontのデフォルトドメインは画像の相対URLで使うため、`NEXT_PUBLIC_CDN_DOMAIN` のビルド時指定は不要。
 
+### うまくいかない場合（Docker Desktop + WSL）
+
+`docker login` が `error storing credentials ... The stub received bad data.` で失敗する場合: Windowsの資格情報マネージャーにはECRのトークンが長すぎて保存できない。WSLの `~/.docker/config.json` から `credsStore` を削除して、ログインし直す（認証情報は `config.json` に保存される）。Docker Desktopは再起動時に `"credsStore": "desktop.exe"` を書き戻すため、再起動後に同じエラーが出たら再度実行する。
+
+```bash
+python3 -c 'import json,os;p=os.path.expanduser("~/.docker/config.json");d=json.load(open(p));d.pop("credsStore",None);json.dump(d,open(p,"w"),indent=2)'
+```
+
 ## 5. 全体をapplyする
 
 `infra/env/dev/terraform.tfvars` の `container_image` を、手順4で表示されたイメージURIに置き換える。planでイメージURIと作成対象を確認する。
