@@ -81,6 +81,8 @@ docker push "$image"
 printf '%s\n' "$image"
 ```
 
+最後に表示されたイメージURIを、`infra/env/dev/terraform.tfvars` の `container_image` に設定する（例: 
+
 `next-js-ssr-dev-app` は `name_prefix = "next-js-ssr-dev"` の場合の名前。変更していればリポジトリ名を合わせる。CloudFrontのデフォルトドメインは画像の相対URLで使うため、`NEXT_PUBLIC_CDN_DOMAIN` のビルド時指定は不要。
 
 ### うまくいかない場合（Docker Desktop + WSL）
