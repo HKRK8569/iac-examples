@@ -107,17 +107,16 @@ data "archive_file" "auto_stop" {
 }
 
 resource "aws_lambda_function" "auto_stop" {
-  count                          = var.auto_stop_enabled ? 1 : 0
-  function_name                  = "${var.name_prefix}-bastion-auto-stop"
-  role                           = aws_iam_role.auto_stop[0].arn
-  runtime                        = "nodejs24.x"
-  handler                        = "index.handler"
-  architectures                  = ["arm64"]
-  filename                       = data.archive_file.auto_stop[0].output_path
-  source_code_hash               = data.archive_file.auto_stop[0].output_base64sha256
-  timeout                        = 30
-  memory_size                    = 128
-  reserved_concurrent_executions = 1
+  count            = var.auto_stop_enabled ? 1 : 0
+  function_name    = "${var.name_prefix}-bastion-auto-stop"
+  role             = aws_iam_role.auto_stop[0].arn
+  runtime          = "nodejs24.x"
+  handler          = "index.handler"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.auto_stop[0].output_path
+  source_code_hash = data.archive_file.auto_stop[0].output_base64sha256
+  timeout          = 30
+  memory_size      = 128
 
   environment {
     variables = {
