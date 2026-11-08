@@ -1,0 +1,201 @@
+# nextjs-ssr
+
+## 概要
+nextjs(SSR)をAWSにデプロイするterraformのコード
+画像などはS3に配置しcloudFront経由で取得を行う想定
+SSRページは編集の即時反映を優先して毎回レンダリングする（キャッシュしない）
+CloudFrontでキャッシュするのは静的シェル・画像・アセットで、アプリが `Cache-Control`（`revalidate`）を返せばSSRページのキャッシュにも切り替えられる
+
+- app
+   - nextjsのコードを配置
+- infra
+   - terraformのコードを配置
+
+## ディレクトリ構成
+
+```
+infra/
+├── env/                  # 環境ごとのルートモジュール（ここで terraform を実行する）
+│   ├── dev/
+│   ├── stg/
+│   └── prd/
+└── modules/              # 環境から呼び出される部品
+    ├── network/          # VPC / subnet / IGW / NAT / route
+    ├── app/              # ALB / ECS / Aurora / ECR / S3 / Secrets Manager
+    └── edge/             # CloudFront / 閲覧者IP制限用WAF
+```
+
+## ローカル起動手順(初回)
+
+Docker Desktop（Linuxコンテナ）とNode.js/npmを用意し、Docker Engineを起動しておく。
+以下はプロジェクトルートから実行する。既に `app/.env.local` がある場合はコピーを省略する。
+
+
+```bash
+cd app
+docker compose up -d
+cp .env.example .env.local
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+DBの起動完了後、migrationでテーブルを作成し、開発サーバーを起動する。
+ブラウザで [http://localhost:3000](http://localhost:3000) を開く。DBは `localhost:5433` に接続する。
+画像は選択時に `app/.local-images/` へ保存され、タイトルの下に表示される。「編集／プレビュー」で記事と同じ表示を確認でき、投稿後は記事画面へ移動する。
+ローカル保存にはAWS認証やS3は不要。保存した画像はサーバー再起動後も利用でき、Git・Dockerビルドの対象からは除外する。
+
+`npm run dev` は画像をローカルに保存する。明示する場合は `.env.local` に `IMAGE_STORAGE=local` を設定する。
+S3を使う場合は `IMAGE_STORAGE=s3` と実際の `IMAGES_BUCKET_NAME` を設定し、AWS認証・ローカルからのアクセス用CORS設定を用意する。本番は未指定時もS3を使う。
+
+## デプロイ手順
+
+初回デプロイのチェックリスト、ECRへのpush、Terraformの適用順序、DB migration、動作確認は [DEPLOY.md](DEPLOY.md) を参照する。
+
+## CloudFrontの閲覧者IP制限
+
+各環境の `infra/env/<環境>/terraform.tfvars` で、IPv4・IPv6の許可CIDRをそれぞれ複数指定できる。
+
+```hcl
+cloudfront_ip_restriction_enabled = true
+cloudfront_allowed_ipv4_cidrs = [
+  "203.0.113.10/32",
+  "198.51.100.0/24",
+]
+cloudfront_allowed_ipv6_cidrs = [
+  "2001:db8::10/128",
+  "2001:db8:1234::/48",
+]
+```
+
+## 削除保護と最終スナップショット
+
+各環境の `terraform.tfvars` から、Aurora・ALBの削除保護とAurora削除時の最終スナップショットを個別に設定する。
+既定値は従来のdevと同じで、削除保護OFF・最終スナップショット省略。環境名や `Env` タグからの自動切り替えは行わない。
+
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `aurora_deletion_protection` | `false` | Auroraクラスターの削除をAWS側で拒否する |
+| `alb_deletion_protection` | `false` | ALBの削除をAWS側で拒否する |
+| `aurora_skip_final_snapshot` | `true` | `false`にするとAurora削除時に最終スナップショットを保存する |
+| `aurora_final_snapshot_identifier` | `null` | 最終スナップショット名。保存する場合は必須 |
+
+prd環境を作成するときの設定例:
+
+```hcl
+aurora_deletion_protection       = true
+alb_deletion_protection          = true
+aurora_skip_final_snapshot       = false
+aurora_final_snapshot_identifier = "next-js-ssr-prd-final-001"
+```
+
+## ECS・Auroraのスペック
+
+各環境の `terraform.tfvars` から、ECSタスク・Aurora・踏み台のスペックを設定する
+
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `ecs_task_cpu` | `256` | ECSタスクのCPUユニット（1024 = 1 vCPU） |
+| `ecs_task_memory` | `512` | ECSタスクのメモリ（MiB）。CPUごとにFargateが許可する値のみ |
+| `aurora_engine_version` | `"17.6"` | Aurora PostgreSQLのバージョン。自動マイナーアップグレードは無効のため、上げるときはこの値を変更する |
+| `aurora_instance_class` | `"db.t4g.medium"` | Auroraのwriter・readerのインスタンスクラス（共通） |
+| `bastion_instance_type` | `"t4g.nano"` | 踏み台のインスタンスタイプ。AMIがarm64のためGraviton系のみ |
+
+
+
+## DBへの接続（踏み台経由）
+
+Auroraはインターネット経路のないDBサブネットにあるため、踏み台EC2を経由した
+SSMポートフォワーディングで接続する。踏み台はインバウンド全閉・公開IPなし・SSHキーなしで、
+接続はSSM Session Manager（IAM認証）のみ。
+
+### 前提
+
+- AWS CLI + [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) をローカルにインストール
+- 実行するIAMユーザー/ロールに `ssm:StartSession` の許可（対象を踏み台に限定する例）
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "ssm:StartSession",
+  "Resource": [
+    "arn:aws:ec2:ap-northeast-1:<ACCOUNT_ID>:instance/<踏み台のインスタンスID>",
+    "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSessionToRemoteHost"
+  ]
+}
+```
+
+### 接続手順
+
+Linux（bash）では次のコマンドでトンネルを張る（プロジェクトルートで実行）。
+
+```bash
+cd infra/env/dev
+
+# トンネルを張る（ローカルの15432 → Auroraの5432）
+aws ssm start-session \
+  --target $(terraform output -raw bastion_instance_id) \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"$(terraform output -raw aurora_writer_endpoint)\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
+```
+
+接続情報はSecrets Managerに保存されている。トンネルを開いたまま、別のLinux（bash）ターミナルでプロジェクトルートから接続を確認する。
+
+```bash
+mkdir -p app/certs
+curl --fail --location https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o app/certs/global-bundle.pem
+AURORA_WRITER=$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)
+psql "host=$AURORA_WRITER hostaddr=127.0.0.1 port=15432 user=postgres dbname=app sslmode=verify-full sslrootcert=app/certs/global-bundle.pem"
+```
+
+### DB接続のTLS設定
+
+ローカルのWeb開発はHTTPのまま、ローカルPostgreSQLは `DB_SSL_MODE=disable`（未指定時も同じ）で利用する。
+`app/.env.example` を `app/.env.local` にコピーすると、composeのDBポート5433に接続できる。
+
+Auroraは `DB_SSL_MODE=verify-full` を指定し、AWSのCA証明書と接続先名を検証する。
+ECSタスク定義はTLSを有効にし、Dockerfileがビルド時に取得した `/app/certs/global-bundle.pem` を利用する。
+writer / readerはそれぞれのエンドポイント名を検証する。ブラウザのHTTP/HTTPS設定とは独立している。
+
+参考: [AuroraのCA証明書](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/UsingWithRDS.SSL.html)
+
+### 踏み台の停止・起動
+
+使わないときは停止しておく（EC2の課金を止める。SSM接続は起動中のみ可能）。
+
+```
+aws ec2 stop-instances --instance-ids $(terraform output -raw bastion_instance_id)
+aws ec2 start-instances --instance-ids $(terraform output -raw bastion_instance_id)
+```
+
+### 踏み台の自動停止
+
+devでは既定で、踏み台を起動してから60分後に自動停止する。各環境の `terraform.tfvars` で設定する。
+
+```hcl
+bastion_auto_stop_enabled       = true
+bastion_auto_stop_after_minutes = 60
+```
+
+Lambdaは `functions/bastion-auto-stop/src/` のJavaScript（`.mjs`）で管理し、Node.js 24で実行する。
+Terraformがソースを直接ZIP化するため、デプロイ時のnpm操作・ビルドは不要。AWS SDKはLambdaランタイム同梱のv3を利用し、そのバージョンはAWSが管理する。
+
+ローカルテストはNode.js 22.12以上（24推奨）で、プロジェクトルートから次を実行する。AWS SDKはローカルテスト用のdevDependenciesとして導入する。テストはVitestで実行し、テスト名は日本語で記述する。
+
+```text
+npm --prefix functions/bastion-auto-stop ci
+npm --prefix functions/bastion-auto-stop test
+```
+
+ZIPには `index.mjs` と `auto-stop.mjs` だけを格納し、テスト・npmパッケージ・依存ライブラリは含めない。テストで使うSDKはpackage-lock.jsonで固定し、Lambda同梱SDKのバージョンとは独立している。
+
+## 削除方法
+
+```
+cd infra/env/dev
+terraform destroy
+```
+
+## 構成図
+
+![構成図](next-js-ssr-diagram.png)
