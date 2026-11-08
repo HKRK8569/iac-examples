@@ -220,14 +220,87 @@ aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths 
 
 画像（`/images/*`）は毎回新しいキーで保存されるため、キャッシュ削除がなくても古い画像は表示されない。ブラウザ側では `_next/static/*` をファイル名のハッシュで区別するため、ブラウザキャッシュの削除は不要。
 
-## 環境を削除するとき
+## 環境を完全に削除する
 
-削除保護が有効なリソースはAWS側で削除を拒否する。`terraform destroy` を先に実行すると、DBインスタンス・ECSなど保護対象外のリソースが削除されてから失敗する可能性がある。削除保護を、環境全体のdestroyを開始前に止める機能として扱わない。
+プロジェクトルートからbashで順に実行する。DB・画像・イメージ・バックアップ・tfstateをすべて削除し、最終スナップショットも作成しない。SSM接続とDBトンネルを終了し、投稿・アップロード・イメージのpushを止めてから進める。
 
-1. 対象環境・backend・削除予定のリソースを確認する。最終スナップショットを残す場合は、`aurora_skip_final_snapshot = false` とし、既存スナップショットと重複しない名前を `aurora_final_snapshot_identifier` に設定する。
-2. `aurora_deletion_protection` と `alb_deletion_protection` を `false` にする。スナップショットを保存する設定は変更しない。
-3. 通常の `terraform plan` で意図した変更だけであることを確認し、`terraform apply` で削除保護の解除とスナップショット設定を反映する。tfvarsの編集やdestroy時の変数指定だけでは、AWS上の保護は解除されない。
-4. AWS上でAuroraクラスターの `DeletionProtection` とALBの `deletion_protection.enabled` が無効になったことを確認する。
-5. `terraform plan -destroy` で削除対象を確認し、対象環境を削除する。最終スナップショットを保存する設定なら、削除後に指定した名前のスナップショットが利用可能になっていることを確認する。
+### 1. 削除用の設定を反映する
 
-削除保護を有効にしたまま、動作確認だけのために本番環境のdestroyを実行しない。削除を伴う動作確認は、削除してよい検証環境で行う。
+`region` と `name_prefix` は `infra/env/dev/terraform.tfvars` と同じ値にする。
+
+```bash
+region='ap-northeast-1'
+name_prefix='next-js-ssr-dev'
+terraform -chdir=infra/env/dev init -backend-config=dev.s3.tfbackend
+```
+
+`infra/env/dev/terraform.tfvars` を以下の設定にする。
+
+```hcl
+aurora_deletion_protection       = false
+alb_deletion_protection          = false
+aurora_skip_final_snapshot       = true
+aurora_final_snapshot_identifier = null
+```
+
+削除保護の解除は、destroyより先に通常のapplyでAWSへ反映する。
+
+```bash
+terraform -chdir=infra/env/dev apply -auto-approve
+```
+
+### 2. アプリを停止する
+
+ECSタスクを0にして停止を待つ。
+
+```bash
+aws ecs update-service --cluster "${name_prefix}-ecs-cluster" --service "${name_prefix}-service" --desired-count 0 --region "$region" --query 'service.desiredCount' --output text
+aws ecs wait services-stable --cluster "${name_prefix}-ecs-cluster" --services "${name_prefix}-service" --region "$region"
+```
+
+### 3. S3・ECRのデータを削除する
+
+画像をすべて削除する。
+
+```bash
+images_bucket="$(terraform -chdir=infra/env/dev output -raw images_bucket_name)"
+aws s3 rm "s3://${images_bucket}/" --recursive --region "$region"
+```
+
+画像バケットで別途バージョニングを有効にした場合は、S3コンソールの「空にする」で過去バージョンと削除マーカーも削除する（[AWSのバケットを空にする手順](https://docs.aws.amazon.com/AmazonS3/latest/userguide/empty-bucket.html)）。
+
+ECRコンソールで対象リージョンの `${name_prefix}-app` を開き、タグなしも含めたすべてのイメージを削除する。マニフェストリストから参照されているイメージは、リストを先に削除してから削除する（[AWSのイメージ削除手順](https://docs.aws.amazon.com/AmazonECR/latest/userguide/delete_image.html)）。画像バケットとECRリポジトリ本体は次のdestroyで削除する。
+
+### 4. Terraform管理のリソースを削除する
+
+```bash
+terraform -chdir=infra/env/dev destroy -auto-approve
+```
+
+CloudFront・ECS・ALB・Aurora・踏み台・自動停止用リソース・CloudWatch Logs・NAT Gateway・Elastic IP・VPCなどを削除する。CloudFrontやAuroraの削除には時間がかかるため、コマンドの終了まで待つ。失敗した場合は原因を解消して同じdestroyを再実行し、完了してから次へ進む。
+
+### 5. シークレットと既存のバックアップを完全に削除する
+
+Terraformが削除予約したDBシークレットを、復旧期間なしで完全削除する（[AWSの完全削除手順](https://repost.aws/knowledge-center/delete-secrets-manager-secret)）。
+
+```bash
+aws secretsmanager delete-secret --secret-id "${name_prefix}-database-secret" --force-delete-without-recovery --region "$region"
+```
+
+シークレットの実際の削除はAWS側で非同期に処理される。
+
+RDSコンソールの「スナップショット」から、この環境の `${name_prefix}-postgres` に属する既存の最終スナップショット・手動スナップショットをすべて削除する。保持済みの自動バックアップがあれば「自動バックアップ」の「保持」から削除する。別途保存したこの環境のDBダンプ・画像・ECRイメージのコピーも、保存先から削除する。
+
+### 6. Terraform管理のリソースが残っていないことを確認し、tfstateを削除する
+
+tfstate用S3バケットを削除する前に、Terraformの管理対象リソースが残っていないことを確認する。
+
+```bash
+terraform -chdir=infra/env/dev state list
+```
+
+正常終了して何も表示されなければ、tfstate上の管理対象リソースは残っていない。リソースが表示された場合は手順4のdestroyを再実行する。backendへの接続エラーは削除完了として扱わない。
+
+確認後、`infra/env/dev/dev.s3.tfbackend` の `bucket` に記載したバケットをS3コンソールで選択し、「空にする」→「削除」の順に操作する。バージョニングが有効なため、過去のtfstate・削除マーカーも含めて削除する（[AWSのバケット削除手順](https://docs.aws.amazon.com/AmazonS3/latest/userguide/delete-bucket.html)）。
+
+この手順はデプロイ手順1で作成した専用バケットを削除するもの。他環境と共有している場合は、この環境の `dev/` 配下の全バージョンと削除マーカーだけを削除し、共有バケット本体は残す。
