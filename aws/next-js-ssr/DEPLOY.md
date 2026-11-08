@@ -221,15 +221,19 @@ aws s3 rm "s3://${images_bucket}/" --recursive --region "$region"
 
 画像バケットで別途バージョニングを有効にした場合は、S3コンソールの「空にする」で過去バージョンと削除マーカーも削除する（[AWSのバケットを空にする手順](https://docs.aws.amazon.com/AmazonS3/latest/userguide/empty-bucket.html)）。
 
-ECRコンソールで対象リージョンの `${name_prefix}-app` を開き、タグなしも含めたすべてのイメージを削除する。マニフェストリストから参照されているイメージは、リストを先に削除してから削除する（[AWSのイメージ削除手順](https://docs.aws.amazon.com/AmazonECR/latest/userguide/delete_image.html)）。画像バケットとECRリポジトリ本体は次のdestroyで削除する。
+ECRリポジトリ `${name_prefix}-app` を、タグなしも含めたすべてのイメージごと削除する。buildxでpushしたマニフェストリストやattestationも残らない。
+
+```bash
+aws ecr delete-repository --repository-name "${name_prefix}-app" --force --region "$region"
+```
+
+ECRリポジトリは削除済みとして次のdestroyでstateから外れる。画像バケットは次のdestroyで削除する。
 
 ### 4. Terraform管理のリソースを削除する
 
 ```bash
 terraform -chdir=infra/env/dev destroy -auto-approve
 ```
-
-CloudFront・ECS・ALB・Aurora・踏み台・自動停止用リソース・CloudWatch Logs・NAT Gateway・Elastic IP・VPCなどを削除する。CloudFrontやAuroraの削除には時間がかかるため、コマンドの終了まで待つ。失敗した場合は原因を解消して同じdestroyを再実行し、完了してから次へ進む。
 
 ### 5. シークレットと既存のバックアップを完全に削除する
 
