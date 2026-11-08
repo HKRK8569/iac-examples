@@ -126,7 +126,7 @@ curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https:
 ```bash
 writer="$(terraform -chdir=infra/env/dev output -raw aurora_writer_endpoint)"
 bastion="$(terraform -chdir=infra/env/dev output -raw bastion_instance_id)"
-aws ssm start-session --target "$bastion" \
+aws ssm start-session --target "$bastion" --region ap-northeast-1 \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
   --parameters "{\"host\":[\"$writer\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"15432\"]}"
 ```
@@ -171,54 +171,6 @@ curl --fail --location "https://${cdn}/api/reports?page=1"
 一覧APIが200でJSONを返すことを確認する。`https://<CloudFrontドメイン>/reports/new` から画像付きの日報を投稿し、一覧と記事ページで画像が表示されることも確認する。失敗時はECSサービスのイベント、停止タスクの理由、CloudWatch Logsの `/ecs/next-js-ssr-dev` を調べる。
 
 DBの準備状態は `/api/ready` で確認し、ALBの正常判定とは分けて扱う。CloudFrontの503エラーキャッシュもTTLを0に設定し、復旧後の確認で古い503を返さないようにする。DB障害でECSタスクの入れ替えを繰り返さないよう、ALBの確認先を `/api/ready` に変更しない。ローカルの `localhost:3000` からS3へ直接PUTするCORS設定もまだないので、画像投稿の確認はCloudFrontドメインから行う。
-
-### CloudFrontからALBへのアクセス制限の確認
-
-- [ ] 自分のCloudFront経由で `/api/health` が200になり、ページ・APIが利用できる
-- [ ] ALBターゲットグループが正常で、秘密ヘッダー検証によってECSのヘルスチェックが失敗していない
-- [ ] 検証用の別CloudFrontディストリビューションから同じALBへ転送した場合、秘密ヘッダーなし・誤った値の両方で `403 Access denied` になる
-- [ ] 一般の端末からALBへ直接接続した場合は、引き続きSGで接続が遮断される
-
-別CloudFrontでの確認には、ALBのDNS名をオリジンとする検証用ディストリビューションを使い、キャッシュを無効化してALBの応答を確認する。検証用には正しい秘密値を設定しない。オリジンへの接続プロトコルは実環境に合わせる（現構成ではHTTP）。検証後は検証用ディストリビューションを削除する。
-
-端末からALBへの直接接続はSGで拒否されるため、403ではなく接続タイムアウトが想定される。ヘッダー検証による403の確認には、SGが許可するCloudFront経由の経路が必要。ヘルスチェック専用にヘッダー検証を回避するALBリスナールールは追加しない。
-
-秘密値を再生成する場合は、ALBが旧値と新値の両方を受け付ける状態にしてからCloudFrontを切り替え、反映後に旧値を削除する。`terraform apply -replace=random_password.origin_verify` だけでのローテーションは、更新中の403を避けられない。
-
-### 踏み台の自動停止の確認
-
-削除してよいdevなどの検証環境で確認する。動作確認中は踏み台のSSM接続とDBトンネルが切断されるため、migrationなどの作業は終了しておく。
-
-- [ ] 自動停止を有効にしてapplyし、Lambda・2つのEventBridgeルール・Schedulerグループが作成された
-- [ ] 踏み台を停止してから再び起動し、専用Schedulerグループに `stop-<インスタンスID>-<起動時刻のUnix秒>` の単発予約が作成された。時刻が最新の起動時刻＋設定分数を基準にしている
-- [ ] 設定分数の経過後に対象の踏み台だけが `stopping` / `stopped` になり、Lambdaログに `stop_requested` が記録された。実行済みの予約が自動削除された
-- [ ] 期限前に手動で停止・起動し直した場合、新しい起動時刻から予約され、古い予約で早く停止されない
-- [ ] 既存の起動中インスタンスや、停止時間の変更も、5分ごとの確認で最新の起動時刻を基準に反映される
-- [ ] `bastion_auto_stop_enabled = false` をapplyすると自動停止用リソースとグループ内の予約が削除され、踏み台自体は維持される
-
-検証時は停止時間を数分に短縮できるが、初回作成・予約欠落時の補完は5分間隔であり、Schedulerやイベント処理でも遅延する。検証後は希望する時間へ戻してapplyする。
-失敗時はCloudWatch Logsの `/aws/lambda/<name_prefix>-bastion-auto-stop` とEventBridgeルールの配信失敗を確認する。自動停止は普段の停止操作の補助であり、接続の有無ではなく起動からの時間で判定する。
-
-## 2回目以降の更新
-
-コード変更時は手順4で新しいタグをpushし、`container_image` を更新して手順5の全体plan・applyを実行する。DBスキーマを変更する場合は、既存アプリと両立するmigrationを先に適用し、その後に新しいイメージへ切り替える。
-
-### イメージ更新後のCloudFrontキャッシュ削除
-
-一覧・投稿ページの静的シェルと `_next/static/*` は、CloudFrontで最大1時間キャッシュされる。新しいイメージには前のビルドのJS・CSSが含まれないため、古いシェルがエッジに残ると、参照先のアセットが404になり画面が崩れる可能性がある。イメージを切り替えたら、ECSの入れ替え完了を待ってからキャッシュを削除する。
-
-Terraformの `apply` はECSサービスの入れ替え完了を待たない。入れ替え中にキャッシュを削除すると、旧タスクの応答が再びキャッシュされる可能性があるため、`services-stable` の完了後に実行する。
-
-```bash
-cdn="$(terraform -chdir=infra/env/dev output -raw cloudfront_domain_name)"
-aws ecs wait services-stable --cluster next-js-ssr-dev-ecs-cluster --services next-js-ssr-dev-service --region ap-northeast-1
-distribution_id="$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='${cdn}'].Id | [0]" --output text)"
-aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths '/*'
-```
-
-クラスター名・サービス名は `name_prefix = "next-js-ssr-dev"` の場合の値。変更していれば合わせる。`services-stable` は最大10分で待機を終了するため、タイムアウトした場合はECSサービスのイベントを確認してから再実行する。キャッシュ削除の完了は `aws cloudfront get-invalidation --distribution-id <ID> --id <Invalidation ID>` の `Status` が `Completed` になったことで確認する。`/*` の指定は1パスとして数えられ、月1,000パスまでは無料。
-
-画像（`/images/*`）は毎回新しいキーで保存されるため、キャッシュ削除がなくても古い画像は表示されない。ブラウザ側では `_next/static/*` をファイル名のハッシュで区別するため、ブラウザキャッシュの削除は不要。
 
 ## 環境を完全に削除する
 
