@@ -1,0 +1,13 @@
+{
+  "name": "cf-worker-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260124.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
