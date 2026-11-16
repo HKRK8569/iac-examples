@@ -6,6 +6,7 @@ provider "registry.terraform.io/cloudflare/cloudflare" {
   constraints = "~> 5.14"
   hashes = [
     "h1:F1VwtsDmYrBEKe0XfgENBunyJVtLHRQODqFYCU5pkwc=",
+    "h1:iyIjUQIxl6vMTH4zuhMhmmE6RjRNVbBTA/m2LbmF+1U=",
     "zh:0e21bfc6d4698b7e7d7b39b1635c5e1dac49b9e39e205b38d9d879e31aa63002",
     "zh:269c80bdf54e34a80e01e742ab2705c56c360cece256348301a69b316e735dca",
     "zh:32420d3ebf3a18f5d4d259390e4c98f0b31e4d6f703572a0dafaf1af8361bd14",
